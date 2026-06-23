@@ -1,0 +1,29 @@
+# FastAPI
+
+fastapi==0.116.0
+uvicorn==0.42.0
+python-multipart==0.0.22
+
+# Pydantic / 환경설정
+
+pydantic==2.12.5
+pydantic-settings==2.13.1
+python-dotenv==1.2.2
+email-validator==2.3.0
+
+# Database
+
+SQLAlchemy==2.0.32
+alembic==1.18.4
+asyncmy==0.2.11
+
+# Authentication
+
+passlib==1.7.4
+bcrypt==4.0.1
+PyJWT==2.4.0
+cryptography==46.0.6
+
+# 외부 API 및 AI 서버 호출
+
+httpx==0.28.1
