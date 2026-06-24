@@ -13,9 +13,10 @@ email-validator==2.3.0
 
 # Database
 
-SQLAlchemy==2.0.32
+SQLAlchemy==2.0.51
 alembic==1.18.4
 asyncmy==0.2.11
+PyMySQL==1.1.2
 
 # Authentication
 

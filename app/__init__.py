@@ -1,0 +1,1 @@
+"""TukTak backend application package."""
