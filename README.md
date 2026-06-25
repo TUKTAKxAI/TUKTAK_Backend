@@ -29,4 +29,4 @@ Swagger UI는 `http://localhost:8081/docs`, 상태 확인은 `/health`에서 제
 - `POST /api/v1/auth/logout`
 
 보호 API는 로그인 응답의 액세스 토큰을 `Authorization: Bearer <token>`으로 전달합니다.
-리프레시 토큰은 DB에 원문이 아닌 SHA-256 해시로 저장되며 갱신 시 회전됩니다.
+리프레시 토큰은 DB에 원문이 아닌 SHA-256 해시로 저장되며 갱신 시 회전됩니다...
