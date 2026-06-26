@@ -36,6 +36,7 @@ async def create_quote(
         .where(
             MatchingRequest.matching_request_id == matching_request_id,
             MatchingTarget.contractor_id == current_user.user_id,
+            MatchingTarget.target_status.in_(["NOTIFIED", "VIEWED"]),
         )
         .with_for_update()
     )
@@ -93,7 +94,7 @@ async def list_quotes_for_matching_request(
     size: int,
 ) -> tuple[list[QuoteSummary], int, int, int]:
     detail = await get_matching_request_detail(db, current_user, matching_request_id)
-    if current_user.user_type != "CUSTOMER" or detail.customer_id != current_user.user_id:
+    if current_user.user_type != "CUSTOMER" or detail.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="Customer account required")
 
     page, size = pagination(page, size)
@@ -181,7 +182,7 @@ async def get_quote_detail(
     result = await db.execute(
         select(
             Quote,
-            MatchingRequest.customer_id,
+            MatchingRequest.user_id,
             MatchingRequest.title,
             ContractorProfile.business_name,
         )
@@ -193,9 +194,9 @@ async def get_quote_detail(
     if row is None:
         raise HTTPException(status_code=404, detail="Quote not found")
 
-    quote, customer_id, matching_request_title, business_name = row
+    quote, user_id, matching_request_title, business_name = row
     has_customer_access = (
-        current_user.user_type == "CUSTOMER" and customer_id == current_user.user_id
+        current_user.user_type == "CUSTOMER" and user_id == current_user.user_id
     )
     has_contractor_access = (
         current_user.user_type == "CONTRACTOR" and quote.contractor_id == current_user.user_id
@@ -229,6 +230,47 @@ async def get_quote_detail(
     )
 
 
+async def delete_contractor_quote(
+    db: AsyncSession,
+    current_user: User,
+    quote_id: int,
+) -> int:
+    require_contractor(current_user)
+    result = await db.execute(
+        select(Quote, MatchingRequest)
+        .join(MatchingRequest, MatchingRequest.matching_request_id == Quote.matching_request_id)
+        .where(
+            Quote.quote_id == quote_id,
+            Quote.contractor_id == current_user.user_id,
+            Quote.quote_status == "SENT",
+            MatchingRequest.matching_status.in_(QUOTE_OPEN_MATCHING_STATUSES),
+        )
+        .with_for_update()
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Deletable quote not found")
+
+    quote, matching_request = row
+    matching_request_id = matching_request.matching_request_id
+    await db.delete(quote)
+    await db.flush()
+
+    remaining_quote_count = await db.scalar(
+        select(func.count())
+        .select_from(Quote)
+        .where(
+            Quote.matching_request_id == matching_request_id,
+            Quote.quote_status.in_(["SENT", "SELECTED"]),
+        )
+    )
+    if not remaining_quote_count:
+        matching_request.matching_status = "REQUESTED"
+
+    await db.commit()
+    return quote_id
+
+
 async def select_quote(
     db: AsyncSession,
     current_user: User,
@@ -241,8 +283,9 @@ async def select_quote(
         .join(Quote, Quote.matching_request_id == MatchingRequest.matching_request_id)
         .where(
             MatchingRequest.matching_request_id == matching_request_id,
-            MatchingRequest.customer_id == current_user.user_id,
+            MatchingRequest.user_id == current_user.user_id,
             Quote.quote_id == quote_id,
+            Quote.quote_status == "SENT",
         )
         .with_for_update()
     )
@@ -251,7 +294,7 @@ async def select_quote(
         raise HTTPException(status_code=404, detail="Quote not found")
 
     matching_request, quote = row
-    if matching_request.matching_status in {"SELECTED", "CLOSED", "CANCELED"}:
+    if matching_request.matching_status in {"SELECTED", "CLOSED", "CANCELLED"}:
         raise HTTPException(status_code=409, detail="Matching request already finalized")
 
     now = datetime.now(timezone.utc)
@@ -260,6 +303,7 @@ async def select_quote(
         quote.selected_at = now
         matching_request.selected_quote_id = quote.quote_id
         matching_request.selected_contractor_id = quote.contractor_id
+        matching_request.selected_at = now
         matching_request.matching_status = "SELECTED"
         await db.execute(
             update(Quote)

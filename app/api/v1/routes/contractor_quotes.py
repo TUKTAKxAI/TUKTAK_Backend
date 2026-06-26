@@ -4,7 +4,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_user
 from app.db.database import get_db
 from app.db.models import User
-from app.schemas.quote import ContractorQuoteListResponse, QuoteDetailResponse
+from app.schemas.quote import (
+    ContractorQuoteListResponse,
+    QuoteDeleteResponse,
+    QuoteDetailResponse,
+)
 from app.services import quote as quote_service
 
 router = APIRouter(prefix="/contractors/me/quotes", tags=["Contractor Quote"])
@@ -38,3 +42,18 @@ async def get_quote_detail(
 ) -> QuoteDetailResponse:
     quote = await quote_service.get_quote_detail(db, current_user, quote_id)
     return QuoteDetailResponse(quote=quote)
+
+
+@detail_router.delete("/{quote_id}", response_model=QuoteDeleteResponse)
+async def delete_contractor_quote(
+    quote_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> QuoteDeleteResponse:
+    deleted_quote_id = await quote_service.delete_contractor_quote(
+        db, current_user, quote_id
+    )
+    return QuoteDeleteResponse(
+        quote_id=deleted_quote_id,
+        message="Quote deleted",
+    )

@@ -48,7 +48,7 @@ class MatchingRequestSummary(BaseModel):
 
 
 class MatchingRequestDetail(MatchingRequestSummary):
-    customer_id: int
+    user_id: int
     address: str | None
     preferred_date: datetime | None
     preferred_time_start: str | None
@@ -72,6 +72,17 @@ class MatchingRequestCreateResponse(BaseModel):
     created_at: datetime
 
 
+class MatchingRequestCancel(BaseModel):
+    cancel_reason: str | None = Field(None, max_length=500)
+
+
+class MatchingRequestCancelResponse(BaseModel):
+    success: bool = True
+    matching_request_id: int
+    matching_status: str
+    canceled_at: datetime
+
+
 class MatchingRequestListResponse(BaseModel):
     success: bool = True
     items: list[MatchingRequestSummary]
@@ -83,3 +94,9 @@ class MatchingRequestListResponse(BaseModel):
 class MatchingRequestDetailResponse(BaseModel):
     success: bool = True
     request: MatchingRequestDetail
+
+
+class MatchingRequestDeleteResponse(BaseModel):
+    success: bool = True
+    matching_request_id: int
+    message: str

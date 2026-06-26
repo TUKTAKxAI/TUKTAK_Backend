@@ -97,6 +97,12 @@ class QuoteDetailResponse(BaseModel):
     quote: QuoteDetail
 
 
+class QuoteDeleteResponse(BaseModel):
+    success: bool = True
+    quote_id: int
+    message: str
+
+
 class ContractorQuoteListResponse(BaseModel):
     success: bool = True
     items: list[ContractorQuoteSummary]

@@ -32,8 +32,12 @@ class MatchingTarget(Base):
     notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    declined_reason: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
     )
 
     matching_request: Mapped["MatchingRequest"] = relationship(back_populates="targets")

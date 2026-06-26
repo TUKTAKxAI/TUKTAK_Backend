@@ -11,13 +11,13 @@ from app.db.models.types import BIGINT_PK
 class MatchingRequest(Base):
     __tablename__ = "matching_requests"
     __table_args__ = (
-        Index("ix_matching_requests_customer_status", "customer_id", "matching_status"),
+        Index("ix_matching_requests_user_status", "user_id", "matching_status"),
     )
 
     matching_request_id: Mapped[int] = mapped_column(
         BIGINT_PK, primary_key=True, autoincrement=True
     )
-    customer_id: Mapped[int] = mapped_column(
+    user_id: Mapped[int] = mapped_column(
         BIGINT_PK, ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False
     )
     estimate_id: Mapped[int | None] = mapped_column(BIGINT_PK)
@@ -44,6 +44,8 @@ class MatchingRequest(Base):
     )
     selected_quote_id: Mapped[int | None] = mapped_column(BIGINT_PK)
     selected_contractor_id: Mapped[int | None] = mapped_column(BIGINT_PK)
+    cancel_reason: Mapped[str | None] = mapped_column(String(500))
+    selected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

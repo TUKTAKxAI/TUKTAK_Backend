@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ContractorMatchingRequestSummary(BaseModel):
@@ -25,3 +25,15 @@ class ContractorMatchingRequestListResponse(BaseModel):
     page: int
     size: int
     total: int
+
+
+class ContractorMatchingDecline(BaseModel):
+    declined_reason: str | None = Field(None, max_length=500)
+
+
+class ContractorMatchingDeclineResponse(BaseModel):
+    success: bool = True
+    matching_request_id: int
+    matching_target_id: int
+    target_status: str
+    declined_at: datetime

@@ -35,9 +35,16 @@ class WorkOrder(Base):
         String(20), nullable=False, default="CREATED", server_default="CREATED"
     )
     final_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    contact_revealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scheduled_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scheduled_start_time: Mapped[str | None] = mapped_column(String(10))
     scheduled_end_time: Mapped[str | None] = mapped_column(String(10))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancel_reason: Mapped[str | None] = mapped_column(String(500))
+    customer_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    contractor_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
