@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import ContractorProfile, MatchingRequest, MatchingTarget, Quote, User, WorkOrder
@@ -36,7 +37,7 @@ async def create_matching_request(
 ) -> MatchingRequest:
     require_customer(current_user)
     now = datetime.now(timezone.utc)
-    async with db.begin():
+    try:
         contractor_ids = await _find_candidate_contractors(db)
         matching_request = MatchingRequest(
             customer_id=current_user.user_id,
@@ -71,8 +72,12 @@ async def create_matching_request(
                 for contractor_id in contractor_ids
             ]
         )
-    await db.refresh(matching_request)
-    return matching_request
+        await db.commit()
+        await db.refresh(matching_request)
+        return matching_request
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Matching request could not be created") from exc
 
 
 def summary_from_request(
