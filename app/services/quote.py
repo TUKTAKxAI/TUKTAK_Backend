@@ -12,7 +12,7 @@ from app.db.models import (
     User,
     WorkOrder,
 )
-from app.schemas.quote import QuoteCreate, QuoteSummary
+from app.schemas.quote import ContractorQuoteSummary, QuoteCreate, QuoteDetail, QuoteSummary
 from app.services.matching_common import pagination, require_contractor, require_customer
 from app.services.matching_request import get_matching_request_detail
 
@@ -127,6 +127,106 @@ async def list_quotes_for_matching_request(
         for quote, business_name in result.all()
     ]
     return items, page, size, int(total or 0)
+
+
+async def list_contractor_quotes(
+    db: AsyncSession,
+    current_user: User,
+    quote_status: str | None,
+    page: int,
+    size: int,
+) -> tuple[list[ContractorQuoteSummary], int, int, int]:
+    require_contractor(current_user)
+    page, size = pagination(page, size)
+    filters = [Quote.contractor_id == current_user.user_id]
+    if quote_status:
+        filters.append(Quote.quote_status == quote_status)
+
+    total = await db.scalar(select(func.count()).select_from(Quote).where(*filters))
+    result = await db.execute(
+        select(Quote, MatchingRequest.title, MatchingRequest.matching_status)
+        .join(MatchingRequest, MatchingRequest.matching_request_id == Quote.matching_request_id)
+        .where(*filters)
+        .order_by(Quote.created_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    items = [
+        ContractorQuoteSummary(
+            quote_id=quote.quote_id,
+            matching_request_id=quote.matching_request_id,
+            matching_request_title=matching_request_title,
+            matching_status=matching_status,
+            quote_status=quote.quote_status,
+            total_amount=quote.total_amount,
+            work_scope=quote.work_scope,
+            estimated_minutes=quote.estimated_minutes,
+            visit_count=quote.visit_count,
+            available_date=quote.available_date,
+            valid_until=quote.valid_until,
+            sent_at=quote.sent_at,
+            selected_at=quote.selected_at,
+            created_at=quote.created_at,
+        )
+        for quote, matching_request_title, matching_status in result.all()
+    ]
+    return items, page, size, int(total or 0)
+
+
+async def get_quote_detail(
+    db: AsyncSession,
+    current_user: User,
+    quote_id: int,
+) -> QuoteDetail:
+    result = await db.execute(
+        select(
+            Quote,
+            MatchingRequest.customer_id,
+            MatchingRequest.title,
+            ContractorProfile.business_name,
+        )
+        .join(MatchingRequest, MatchingRequest.matching_request_id == Quote.matching_request_id)
+        .join(ContractorProfile, ContractorProfile.contractor_id == Quote.contractor_id)
+        .where(Quote.quote_id == quote_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Quote not found")
+
+    quote, customer_id, matching_request_title, business_name = row
+    has_customer_access = (
+        current_user.user_type == "CUSTOMER" and customer_id == current_user.user_id
+    )
+    has_contractor_access = (
+        current_user.user_type == "CONTRACTOR" and quote.contractor_id == current_user.user_id
+    )
+    if not has_customer_access and not has_contractor_access:
+        raise HTTPException(status_code=404, detail="Quote not found")
+
+    return QuoteDetail(
+        quote_id=quote.quote_id,
+        matching_request_id=quote.matching_request_id,
+        matching_request_title=matching_request_title,
+        contractor_id=quote.contractor_id,
+        business_name=business_name,
+        quote_status=quote.quote_status,
+        total_amount=quote.total_amount,
+        work_scope=quote.work_scope,
+        quote_items=quote.quote_items_json,
+        included_items=quote.included_items,
+        excluded_items=quote.excluded_items,
+        estimated_minutes=quote.estimated_minutes,
+        visit_count=quote.visit_count,
+        available_date=quote.available_date,
+        arrival_time=quote.arrival_time,
+        as_period_days=quote.as_period_days,
+        valid_until=quote.valid_until,
+        additional_note=quote.additional_note,
+        sent_at=quote.sent_at,
+        selected_at=quote.selected_at,
+        created_at=quote.created_at,
+        updated_at=quote.updated_at,
+    )
 
 
 async def select_quote(

@@ -24,6 +24,8 @@ class MatchingSmokeTest(unittest.TestCase):
             "/api/v1/matching-requests/{matching_request_id}/quotes",
             "/api/v1/matching-requests/{matching_request_id}/select-quote",
             "/api/v1/contractors/me/matching-requests",
+            "/api/v1/contractors/me/quotes",
+            "/api/v1/contractor-quotes/{quote_id}",
         }
         self.assertTrue(expected.issubset(app.openapi()["paths"]))
         self.assertIn(

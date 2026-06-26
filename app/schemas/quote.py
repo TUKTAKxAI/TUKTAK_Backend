@@ -50,6 +50,61 @@ class QuoteListResponse(BaseModel):
     total: int
 
 
+class ContractorQuoteSummary(BaseModel):
+    quote_id: int
+    matching_request_id: int
+    matching_request_title: str
+    matching_status: str
+    quote_status: str
+    total_amount: Decimal
+    work_scope: str | None
+    estimated_minutes: int | None
+    visit_count: int | None
+    available_date: datetime | None
+    valid_until: datetime | None
+    sent_at: datetime | None
+    selected_at: datetime | None
+    created_at: datetime
+
+
+class QuoteDetail(BaseModel):
+    quote_id: int
+    matching_request_id: int
+    matching_request_title: str
+    contractor_id: int
+    business_name: str | None = None
+    quote_status: str
+    total_amount: Decimal
+    work_scope: str | None
+    quote_items: list | None = None
+    included_items: str | None
+    excluded_items: str | None
+    estimated_minutes: int | None
+    visit_count: int | None
+    available_date: datetime | None
+    arrival_time: str | None
+    as_period_days: int | None
+    valid_until: datetime | None
+    additional_note: str | None
+    sent_at: datetime | None
+    selected_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class QuoteDetailResponse(BaseModel):
+    success: bool = True
+    quote: QuoteDetail
+
+
+class ContractorQuoteListResponse(BaseModel):
+    success: bool = True
+    items: list[ContractorQuoteSummary]
+    page: int
+    size: int
+    total: int
+
+
 class QuoteCreateResponse(BaseModel):
     success: bool = True
     quote_id: int
