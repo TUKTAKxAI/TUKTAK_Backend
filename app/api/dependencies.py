@@ -1,8 +1,10 @@
-import jwt
+import jwt, os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from dotenv import load_dotenv 
+from jose import JWTError
 
 from app.core.security import decode_token
 from app.db.database import get_db
@@ -10,6 +12,14 @@ from app.db.models import User
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
+
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM", "HS256") 
+
+if not SECRET_KEY:
+    raise ValueError("환경변수(.env)에 SECRET_KEY가 설정되지 않았습니다!")
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -42,3 +52,22 @@ def require_roles(*roles: str):
         return user
 
     return dependency
+
+
+def get_current_contractor_id(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="토큰이 유효하지 않거나 만료되었습니다.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        contractor_id_str: str = payload.get("sub")
+        
+        if contractor_id_str is None:
+            raise credentials_exception
+        return int(contractor_id_str)
+        
+    except JWTError:
+        raise credentials_exception
