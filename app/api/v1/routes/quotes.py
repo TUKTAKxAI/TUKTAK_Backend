@@ -4,10 +4,35 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.dependencies import get_current_user
 from app.db.database import get_db
 from app.db.models import User
-from app.schemas.quote import QuoteListResponse, SelectQuoteRequest, SelectQuoteResponse
+from app.schemas.quote import (
+    QuoteCreate,
+    QuoteCreateResponse,
+    QuoteListResponse,
+    SelectQuoteRequest,
+    SelectQuoteResponse,
+)
 from app.services import quote as quote_service
 
 router = APIRouter(prefix="/matching-requests/{matching_request_id}", tags=["Quote"])
+
+
+@router.post("/quotes", response_model=QuoteCreateResponse, status_code=201)
+async def create_matching_request_quote(
+    matching_request_id: int,
+    payload: QuoteCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> QuoteCreateResponse:
+    quote = await quote_service.create_quote(db, current_user, matching_request_id, payload)
+    return QuoteCreateResponse(
+        quote_id=quote.quote_id,
+        matching_request_id=quote.matching_request_id,
+        contractor_id=quote.contractor_id,
+        quote_status=quote.quote_status,
+        total_amount=quote.total_amount,
+        sent_at=quote.sent_at,
+        created_at=quote.created_at,
+    )
 
 
 @router.get("/quotes", response_model=QuoteListResponse)

@@ -1,7 +1,22 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class QuoteCreate(BaseModel):
+    total_amount: Decimal = Field(ge=0)
+    work_scope: str = Field(min_length=1)
+    quote_items: list | None = None
+    included_items: str | None = None
+    excluded_items: str | None = None
+    estimated_minutes: int | None = Field(None, ge=1)
+    visit_count: int | None = Field(None, ge=1)
+    available_date: datetime | None = None
+    arrival_time: str | None = Field(None, max_length=50)
+    as_period_days: int | None = Field(None, ge=0)
+    valid_until: datetime | None = None
+    additional_note: str | None = None
 
 
 class SelectQuoteRequest(BaseModel):
@@ -33,6 +48,17 @@ class QuoteListResponse(BaseModel):
     page: int
     size: int
     total: int
+
+
+class QuoteCreateResponse(BaseModel):
+    success: bool = True
+    quote_id: int
+    matching_request_id: int
+    contractor_id: int
+    quote_status: str
+    total_amount: Decimal
+    sent_at: datetime | None
+    created_at: datetime
 
 
 class SelectQuoteResponse(BaseModel):

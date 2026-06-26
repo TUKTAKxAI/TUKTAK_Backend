@@ -26,6 +26,10 @@ class MatchingSmokeTest(unittest.TestCase):
             "/api/v1/contractors/me/matching-requests",
         }
         self.assertTrue(expected.issubset(app.openapi()["paths"]))
+        self.assertIn(
+            "post",
+            app.openapi()["paths"]["/api/v1/matching-requests/{matching_request_id}/quotes"],
+        )
 
     def test_matching_request_rejects_invalid_budget_range(self) -> None:
         with self.assertRaises(ValueError):
