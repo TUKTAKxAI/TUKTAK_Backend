@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user, require_roles
@@ -33,7 +33,7 @@ from app.schemas.common import (
     WorkOrderDetailResponse,
 )
 
-router = APIRouter(tags=["Quote", "Work Order", "Notification", "Review"])
+router = APIRouter()
 
 
 def _quote_dict(q: ContractorQuote, contractor: ContractorProfile | None = None) -> dict:
@@ -64,7 +64,12 @@ def _quote_dict(q: ContractorQuote, contractor: ContractorProfile | None = None)
     }
 
 
-@router.post("/matching-requests/{matching_request_id}/quotes", response_model=QuoteCreateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/matching-requests/{matching_request_id}/quotes",
+    response_model=QuoteCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Quote"],
+)
 async def create_quote(
     matching_request_id: int,
     payload: QuoteCreateRequest,
@@ -108,7 +113,7 @@ async def create_quote(
     return QuoteCreateResponse(quote_id=quote.quote_id, quote_status=quote.quote_status, sent_at=quote.sent_at or now)
 
 
-@router.get("/contractor-quotes/{quote_id}", response_model=QuoteDetailResponse)
+@router.get("/contractor-quotes/{quote_id}", response_model=QuoteDetailResponse, tags=["Quote"])
 async def get_quote(
     quote_id: int,
     db: AsyncSession = Depends(get_db),
@@ -124,7 +129,7 @@ async def get_quote(
     return QuoteDetailResponse(quote=_quote_dict(quote, contractor))
 
 
-@router.get("/contractors/me/quotes", response_model=QuoteListResponse)
+@router.get("/contractors/me/quotes", response_model=QuoteListResponse, tags=["Quote"])
 async def get_my_quotes(
     quote_status: str | None = Query(None),
     page: int = Query(1, ge=1),
@@ -160,7 +165,7 @@ async def get_my_quotes(
     )
 
 
-@router.get("/work-orders/{work_order_id}", response_model=WorkOrderDetailResponse)
+@router.get("/work-orders/{work_order_id}", response_model=WorkOrderDetailResponse, tags=["Work Order"])
 async def get_work_order(
     work_order_id: int,
     db: AsyncSession = Depends(get_db),
@@ -190,7 +195,7 @@ async def get_work_order(
     })
 
 
-@router.get("/notifications", response_model=NotificationListResponse)
+@router.get("/notifications", response_model=NotificationListResponse, tags=["Notification"])
 async def get_notifications(
     is_read: bool | None = Query(None),
     page: int = Query(1, ge=1),
@@ -226,7 +231,11 @@ async def get_notifications(
     )
 
 
-@router.patch("/notifications/{notification_id}/read", response_model=NotificationReadResponse)
+@router.patch(
+    "/notifications/{notification_id}/read",
+    response_model=NotificationReadResponse,
+    tags=["Notification"],
+)
 async def read_notification(
     notification_id: int,
     db: AsyncSession = Depends(get_db),
@@ -242,7 +251,12 @@ async def read_notification(
     return NotificationReadResponse(notification_id=notification.notification_id, is_read=True, read_at=notification.read_at)
 
 
-@router.post("/work-orders/{work_order_id}/reviews", response_model=ReviewCreateResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/work-orders/{work_order_id}/reviews",
+    response_model=ReviewCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Review"],
+)
 async def create_review(
     work_order_id: int,
     payload: ReviewCreateRequest,
@@ -263,7 +277,7 @@ async def create_review(
     return ReviewCreateResponse(review_id=review.review_id, review_status=review.review_status, created_at=review.created_at)
 
 
-@router.get("/users/me/reviews", response_model=ReviewListResponse)
+@router.get("/users/me/reviews", response_model=ReviewListResponse, tags=["Review"])
 async def get_my_reviews(
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
@@ -292,7 +306,7 @@ async def get_my_reviews(
     )
 
 
-@router.get("/contractors/{contractor_id}/reviews", response_model=ReviewListResponse)
+@router.get("/contractors/{contractor_id}/reviews", response_model=ReviewListResponse, tags=["Review"])
 async def get_contractor_reviews(
     contractor_id: int,
     page: int = Query(1, ge=1),
@@ -331,7 +345,7 @@ async def get_contractor_reviews(
     )
 
 
-@router.patch("/reviews/{review_id}", response_model=ReviewUpdateResponse)
+@router.patch("/reviews/{review_id}", response_model=ReviewUpdateResponse, tags=["Review"])
 async def update_review(
     review_id: int,
     payload: ReviewUpdateRequest,
@@ -349,7 +363,7 @@ async def update_review(
     return ReviewUpdateResponse(review_id=review.review_id, updated_at=review.updated_at)
 
 
-@router.delete("/reviews/{review_id}", response_model=ReviewDeleteResponse)
+@router.delete("/reviews/{review_id}", response_model=ReviewDeleteResponse, tags=["Review"])
 async def delete_review(
     review_id: int,
     db: AsyncSession = Depends(get_db),
