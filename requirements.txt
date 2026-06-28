@@ -24,7 +24,9 @@ passlib==1.7.4
 bcrypt==4.0.1
 PyJWT==2.4.0
 cryptography==46.0.6
+python-jose[cryptography]
 
 # 외부 API 및 AI 서버 호출
 
 httpx==0.28.1
+

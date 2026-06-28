@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import List
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, JSON, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -45,3 +46,4 @@ class ContractorProfile(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="contractor_profile")
+    services: Mapped[List["ContractorService"]] = relationship("ContractorService", back_populates="profile")
