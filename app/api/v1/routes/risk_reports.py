@@ -3,7 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
 from app.db.database import get_db
-from app.db.models import User
+from app.db.models import RagDocument, RiskReportSource, User
+from sqlalchemy import select
 from app.schemas.risk_report import (
     RiskReportCreateRequest,
     RiskReportCreateResponse,
@@ -69,6 +70,41 @@ async def get_risk_report_detail(
         user_id=current_user.user_id,
         risk_report_id=risk_report_id,
     )
+    rows = (
+        await db.execute(
+            select(RiskReportSource, RagDocument)
+            .join(RagDocument, RagDocument.document_id == RiskReportSource.document_id)
+            .where(RiskReportSource.risk_report_id == risk_report.risk_report_id)
+            .order_by(RiskReportSource.citation_order)
+        )
+    ).all()
     return RiskReportDetailResponse(
-        report=RiskReportDetail.model_validate(risk_report)
+        report=RiskReportDetail(
+            risk_report_id=risk_report.risk_report_id,
+            estimate_id=risk_report.estimate_id,
+            report_status=risk_report.report_status,
+            risk_score=risk_report.risk_score,
+            risk_level=risk_report.risk_level,
+            summary=risk_report.summary,
+            risk_items=risk_report.risk_items_json,
+            checklist=risk_report.checklist_json,
+            additional_cost_risks=risk_report.additional_cost_risks_json,
+            safety_risks=risk_report.safety_risks_json,
+            contract_risks=risk_report.contract_risks_json,
+            field_variable_risks=risk_report.field_variable_risks_json,
+            sources=[
+                {
+                    "title": doc.title,
+                    "source_name": doc.source_name,
+                    "effective_date": doc.effective_date,
+                    "risk_category": source.risk_category,
+                    "relevance_score": source.relevance_score,
+                    "quoted_summary": source.quoted_summary,
+                }
+                for source, doc in rows
+            ],
+            created_at=risk_report.created_at,
+            completed_at=risk_report.completed_at,
+            updated_at=risk_report.updated_at,
+        )
     )

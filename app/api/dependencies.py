@@ -1,28 +1,18 @@
-import jwt, os
+import jwt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from dotenv import load_dotenv 
-from jose import JWTError
 
 from app.core.security import decode_token
 from app.db.database import get_db
 from app.db.models import User
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+bearer_scheme = HTTPBearer()
 
-
-load_dotenv()
-
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM", "HS256") 
-
-if not SECRET_KEY:
-    raise ValueError("환경변수(.env)에 SECRET_KEY가 설정되지 않았습니다!")
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     unauthorized = HTTPException(
@@ -31,7 +21,7 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = decode_token(token, "access")
+        payload = decode_token(credentials.credentials, "access")
         user_id = int(payload["sub"])
     except (jwt.InvalidTokenError, ValueError, KeyError) as exc:
         raise unauthorized from exc
@@ -54,20 +44,7 @@ def require_roles(*roles: str):
     return dependency
 
 
-def get_current_contractor_id(token: str = Depends(oauth2_scheme)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="토큰이 유효하지 않거나 만료되었습니다.",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        contractor_id_str: str = payload.get("sub")
-        
-        if contractor_id_str is None:
-            raise credentials_exception
-        return int(contractor_id_str)
-        
-    except JWTError:
-        raise credentials_exception
+async def get_current_contractor_id(
+    user: User = Depends(require_roles("CONTRACTOR")),
+) -> int:
+    return user.user_id
