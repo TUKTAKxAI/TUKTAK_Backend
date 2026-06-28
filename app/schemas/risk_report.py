@@ -35,11 +35,16 @@ class RiskReportDetail(BaseModel):
     risk_report_id: int
     estimate_id: int
     report_status: str
-    risk_score: int | None = None
-    risk_level: str | None = None
-    summary: str | None = None
-    result_json: dict[str, Any] | None = None
-    sources_json: list[dict[str, Any]] | None = None
+    risk_score: int
+    risk_level: str
+    summary: str
+    risk_items: list[dict[str, Any]] | None = None
+    checklist: list[dict[str, Any]] | None = None
+    additional_cost_risks: list[dict[str, Any]] | None = None
+    safety_risks: list[dict[str, Any]] | None = None
+    contract_risks: list[dict[str, Any]] | None = None
+    field_variable_risks: list[dict[str, Any]] | None = None
+    sources: list[dict[str, Any]] = []
     created_at: datetime
     completed_at: datetime | None = None
     updated_at: datetime

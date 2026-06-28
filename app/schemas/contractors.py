@@ -118,6 +118,7 @@ class ContractorServicePutResultItem(BaseModel):
     service_task_id: int
     region_code_id: int
     is_active: bool
+    model_config = ConfigDict(from_attributes=True)
 
 class ContractorServicesPutResponse(BaseModel):
     success: bool = True
