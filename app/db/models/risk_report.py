@@ -21,7 +21,7 @@ class RiskReport(Base):
     report_status: Mapped[str] = mapped_column(String(30), nullable=False, default="PROCESSING", server_default="PROCESSING")
     risk_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False, default="LOW", server_default="LOW")
-    summary: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
     risk_items_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     checklist_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     additional_cost_risks_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON)
