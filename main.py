@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.v1.router import api_router
 from app.core.settings import settings
 from app.db.database import async_engine
+from app.middleware.auth_cookies import AuthCookieMiddleware
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(AuthCookieMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,

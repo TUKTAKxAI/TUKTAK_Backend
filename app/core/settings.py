@@ -1,5 +1,7 @@
 from functools import lru_cache
 
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import URL
@@ -29,6 +31,15 @@ class Settings(BaseSettings):
         604800, gt=0, alias="REFRESH_TOKEN_EXPIRE"
     )
     refresh_token_pepper: str | None = Field(None, alias="REFRESH_TOKEN_PEPPER")
+    auth_access_cookie_name: str = Field("tuktak_access_token", alias="AUTH_ACCESS_COOKIE_NAME")
+    auth_refresh_cookie_name: str = Field("tuktak_refresh_token", alias="AUTH_REFRESH_COOKIE_NAME")
+    auth_cookie_domain: str | None = Field(None, alias="AUTH_COOKIE_DOMAIN")
+    auth_cookie_secure: bool | None = Field(None, alias="AUTH_COOKIE_SECURE")
+    auth_cookie_samesite: Literal["lax", "strict", "none"] = Field(
+        "lax",
+        alias="AUTH_COOKIE_SAMESITE",
+    )
+    ai_stub_delay_seconds: float = Field(3.0, ge=0, alias="AI_STUB_DELAY_SECONDS")
 
     terms_of_service_version: str = Field("1.0", alias="TERMS_OF_SERVICE_VERSION")
     privacy_policy_version: str = Field("1.0", alias="PRIVACY_POLICY_VERSION")
@@ -77,6 +88,12 @@ class Settings(BaseSettings):
     @property
     def token_pepper(self) -> str:
         return self.refresh_token_pepper or self.secret_key
+
+    @property
+    def auth_cookie_secure_enabled(self) -> bool:
+        if self.auth_cookie_secure is not None:
+            return self.auth_cookie_secure
+        return self.app_env.lower() not in {"local", "dev", "development", "test"}
 
 
 @lru_cache

@@ -15,6 +15,8 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.core.settings import settings
+from app.middleware.auth_cookies import AuthCookieMiddleware
 from app.schemas.auth import CustomerSignupRequest
 from main import app
 
@@ -45,6 +47,19 @@ class AuthSmokeTest(unittest.TestCase):
             "/api/v1/auth/logout",
         }
         self.assertTrue(expected.issubset(app.openapi()["paths"]))
+
+    def test_auth_cookie_middleware_registered(self) -> None:
+        self.assertTrue(
+            any(item.cls is AuthCookieMiddleware for item in app.user_middleware)
+        )
+
+    def test_logout_without_body_clears_auth_cookies(self) -> None:
+        with TestClient(app) as client:
+            response = client.post("/api/v1/auth/logout")
+            self.assertEqual(response.status_code, 200)
+            set_cookie = response.headers.get("set-cookie", "")
+            self.assertIn(settings.auth_access_cookie_name, set_cookie)
+            self.assertIn(settings.auth_refresh_cookie_name, set_cookie)
 
     def test_public_health_and_agreement_routes(self) -> None:
         with TestClient(app) as client:

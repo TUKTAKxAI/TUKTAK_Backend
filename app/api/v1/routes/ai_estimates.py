@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
 from app.db.database import get_db
-from app.db.models import AiEstimate, User
+from app.db.models import AiEstimate, ReferenceCode, User
 from app.schemas.common import (
     AiEstimateCreateResponse,
     AiEstimateDetail,
@@ -13,8 +13,33 @@ from app.schemas.common import (
     AiEstimateListResponse,
     AiEstimateRetryResponse,
 )
+from app.services import ai_stub
 
 router = APIRouter(tags=["AI Estimate"])
+
+
+async def _normalize_region_code_id(
+    db: AsyncSession,
+    region_code_id: int | None,
+) -> int | None:
+    if region_code_id is None or region_code_id <= 0:
+        return None
+    exists = await db.scalar(
+        select(ReferenceCode.code_id).where(
+            ReferenceCode.code_id == region_code_id,
+            ReferenceCode.is_active.is_(True),
+        )
+    )
+    if exists is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "INVALID_REFERENCE_CODE",
+                "field": "region_code_id",
+                "message": "region_code_id does not exist",
+            },
+        )
+    return region_code_id
 
 
 @router.post("/ai-estimates", response_model=AiEstimateCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -28,6 +53,7 @@ async def create_ai_estimate(
 ) -> AiEstimateCreateResponse:
     if not images:
         raise HTTPException(status_code=422, detail={"code": "INPUT_NEEDS_MORE_INFO", "missing_info": ["images"]})
+    normalized_region_code_id = await _normalize_region_code_id(db, region_code_id)
     estimate = AiEstimate(
         user_id=current_user.user_id,
         description=description,
@@ -39,9 +65,11 @@ async def create_ai_estimate(
         ai_summary="AI 분석 요청이 접수되었습니다.",
         estimate_status="PROCESSING",
         image_urls=[f"/uploads/ai-estimates/{current_user.user_id}/{img.filename}" for img in images],
-        region_code_id=region_code_id,
+        region_code_id=normalized_region_code_id,
     )
     db.add(estimate)
+    await db.flush()
+    await ai_stub.complete_ai_estimate(estimate)
     await db.commit()
     await db.refresh(estimate)
     return AiEstimateCreateResponse(
@@ -111,6 +139,7 @@ async def retry_ai_estimate(
     if images:
         estimate.image_urls = [f"/uploads/ai-estimates/{current_user.user_id}/{img.filename}" for img in images]
     estimate.estimate_status = "PROCESSING"
+    await ai_stub.complete_ai_estimate(estimate)
     await db.commit()
     await db.refresh(estimate)
     return AiEstimateRetryResponse(
