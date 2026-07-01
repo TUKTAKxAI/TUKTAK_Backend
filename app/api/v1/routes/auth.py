@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.core.settings import settings
 from app.schemas.auth import (
     AuthUser,
     AvailabilityResponse,
@@ -66,10 +67,15 @@ async def email_availability(
 @router.post("/login", response_model=LoginResponse)
 async def login(
     payload: LoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> LoginResponse:
     result = await auth_service.login(db, payload)
     user = result.pop("user")
+    request.state.auth_tokens = {
+        "access_token": result["access_token"],
+        "refresh_token": result["refresh_token"],
+    }
     return LoginResponse(
         **result,
         user=AuthUser(
@@ -82,16 +88,40 @@ async def login(
 
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh(
-    payload: RefreshRequest,
+    request: Request,
+    payload: RefreshRequest | None = Body(None),
     db: AsyncSession = Depends(get_db),
 ) -> RefreshResponse:
-    return RefreshResponse(**(await auth_service.refresh(db, payload.refresh_token)))
+    refresh_token = (
+        payload.refresh_token
+        if payload is not None
+        else request.cookies.get(settings.auth_refresh_cookie_name)
+    )
+    if refresh_token is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token is required",
+        )
+    result = await auth_service.refresh(db, refresh_token)
+    request.state.auth_tokens = {
+        "access_token": result["access_token"],
+        "refresh_token": result["refresh_token"],
+    }
+    return RefreshResponse(**result)
 
 
 @router.post("/logout", response_model=MessageResponse)
 async def logout(
-    payload: LogoutRequest,
+    request: Request,
+    payload: LogoutRequest | None = Body(None),
     db: AsyncSession = Depends(get_db),
 ) -> MessageResponse:
-    await auth_service.logout(db, payload.refresh_token)
+    refresh_token = (
+        payload.refresh_token
+        if payload is not None
+        else request.cookies.get(settings.auth_refresh_cookie_name)
+    )
+    if refresh_token is not None:
+        await auth_service.logout(db, refresh_token)
+    request.state.clear_auth_cookies = True
     return MessageResponse(message="Logged out")

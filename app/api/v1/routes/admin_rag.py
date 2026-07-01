@@ -17,6 +17,7 @@ from app.schemas.common import (
     RagDocumentListItem,
     RagDocumentListResponse,
 )
+from app.services import ai_stub
 
 router = APIRouter(prefix="/admin/rag-documents", tags=["Admin RAG"])
 
@@ -73,6 +74,7 @@ async def create_rag_document(
     db.add(document)
     await db.flush()
     attachment.owner_id = document.document_id
+    db.add(await ai_stub.complete_rag_document(document))
     await db.commit()
     await db.refresh(document)
     return RagDocumentCreateResponse(

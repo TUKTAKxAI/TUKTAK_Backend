@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud import risk_report as risk_report_crud
 from app.db.models.risk_report import RiskReport
 from app.schemas.risk_report import RiskReportCreateRequest
+from app.services import ai_stub
 
 
 async def create_risk_report(
@@ -16,6 +17,7 @@ async def create_risk_report(
         user_id=user_id,
         estimate_id=payload.estimate_id,
     )
+    await ai_stub.complete_risk_report(db, risk_report)
     await db.commit()
     await db.refresh(risk_report)
     return risk_report
