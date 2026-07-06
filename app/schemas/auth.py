@@ -1,6 +1,6 @@
 import re
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -18,6 +18,7 @@ class SignupBase(BaseModel):
     nickname: str = Field(min_length=2, max_length=50)
     name: str = Field(min_length=1, max_length=50)
     phone: str | None = Field(None, max_length=20)
+    default_address_json: dict[str, Any] | None = None
     agreements: list[AgreementInput] = Field(min_length=1)
 
     @field_validator("password")

@@ -81,6 +81,7 @@ async def _create_user(
         nickname=payload.nickname,
         name=payload.name,
         phone=payload.phone,
+        default_address_json=payload.default_address_json,
         user_type=user_type,
         account_status="ACTIVE",
     )

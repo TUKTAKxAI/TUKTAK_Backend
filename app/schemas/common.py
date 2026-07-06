@@ -17,6 +17,7 @@ class UserMe(BaseModel):
     nickname: str
     name: str
     phone: str | None = None
+    default_address_json: dict[str, Any] | None = None
     profile_image_url: str | None = None
     user_type: str
     account_status: str
