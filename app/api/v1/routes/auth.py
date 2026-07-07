@@ -33,7 +33,7 @@ async def signup_customer(
     )
     return SignupResponse(
         user_id=user.user_id,
-        user_type="CUSTOMER",
+        user_type=user.user_type,
         created_at=user.created_at,
     )
 
@@ -50,7 +50,7 @@ async def signup_contractor(
     return SignupResponse(
         user_id=user.user_id,
         contractor_id=profile.contractor_id,
-        user_type="CONTRACTOR",
+        user_type=user.user_type,
         approval_status=profile.approval_status,
         created_at=user.created_at,
     )

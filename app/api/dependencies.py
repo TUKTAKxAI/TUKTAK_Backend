@@ -37,7 +37,10 @@ async def get_current_user(
 
 def require_roles(*roles: str):
     async def dependency(user: User = Depends(get_current_user)) -> User:
-        if user.user_type not in roles:
+        has_role = user.user_type in roles or (
+            user.user_type == "BOTH" and any(role in {"CUSTOMER", "CONTRACTOR"} for role in roles)
+        )
+        if not has_role:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
         return user
 

@@ -18,6 +18,8 @@ from app.core.security import (
 from app.core.settings import settings
 from app.middleware.auth_cookies import AuthCookieMiddleware
 from app.schemas.auth import CustomerSignupRequest
+from app.schemas.auth import SignupResponse
+from app.services.auth import _merge_user_type
 from main import app
 
 
@@ -31,10 +33,24 @@ class AuthSmokeTest(unittest.TestCase):
         self.assertTrue(verify_password("Passw0rd!", password_hash))
         self.assertFalse(verify_password("wrong-password", password_hash))
 
-        token, _, _ = create_access_token(7, "CUSTOMER")
+        token, _, _ = create_access_token(7, "BOTH")
         claims = decode_token(token, "access")
         self.assertEqual(claims["sub"], "7")
-        self.assertEqual(claims["user_type"], "CUSTOMER")
+        self.assertEqual(claims["user_type"], "BOTH")
+
+    def test_role_extension_supports_both_accounts(self) -> None:
+        self.assertEqual(_merge_user_type("CUSTOMER", "CONTRACTOR"), "BOTH")
+        self.assertEqual(_merge_user_type("CONTRACTOR", "CUSTOMER"), "BOTH")
+        self.assertEqual(_merge_user_type("BOTH", "CUSTOMER"), "BOTH")
+
+        response = SignupResponse.model_validate(
+            {
+                "user_id": 1,
+                "user_type": "BOTH",
+                "created_at": "2026-07-07T00:00:00Z",
+            }
+        )
+        self.assertEqual(response.user_type, "BOTH")
 
     def test_openapi_contains_auth_contract(self) -> None:
         expected = {

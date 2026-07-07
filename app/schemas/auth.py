@@ -93,7 +93,7 @@ class LogoutRequest(RefreshRequest):
 class SignupResponse(BaseModel):
     success: bool = True
     user_id: int
-    user_type: Literal["CUSTOMER", "CONTRACTOR"]
+    user_type: Literal["CUSTOMER", "CONTRACTOR", "BOTH"]
     contractor_id: int | None = None
     approval_status: str | None = None
     created_at: datetime

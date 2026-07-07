@@ -13,7 +13,13 @@ from app.db.models import (
     WorkOrder,
 )
 from app.schemas.quote import ContractorQuoteSummary, QuoteCreate, QuoteDetail, QuoteSummary
-from app.services.matching_common import pagination, require_contractor, require_customer
+from app.services.matching_common import (
+    CONTRACTOR_ROLES,
+    CUSTOMER_ROLES,
+    pagination,
+    require_contractor,
+    require_customer,
+)
 from app.services.matching_request import get_matching_request_detail
 
 
@@ -94,7 +100,7 @@ async def list_quotes_for_matching_request(
     size: int,
 ) -> tuple[list[QuoteSummary], int, int, int]:
     detail = await get_matching_request_detail(db, current_user, matching_request_id)
-    if current_user.user_type != "CUSTOMER" or detail.user_id != current_user.user_id:
+    if current_user.user_type not in CUSTOMER_ROLES or detail.user_id != current_user.user_id:
         raise HTTPException(status_code=403, detail="Customer account required")
 
     page, size = pagination(page, size)
@@ -196,10 +202,10 @@ async def get_quote_detail(
 
     quote, user_id, matching_request_title, business_name = row
     has_customer_access = (
-        current_user.user_type == "CUSTOMER" and user_id == current_user.user_id
+        current_user.user_type in CUSTOMER_ROLES and user_id == current_user.user_id
     )
     has_contractor_access = (
-        current_user.user_type == "CONTRACTOR" and quote.contractor_id == current_user.user_id
+        current_user.user_type in CONTRACTOR_ROLES and quote.contractor_id == current_user.user_id
     )
     if not has_customer_access and not has_contractor_access:
         raise HTTPException(status_code=404, detail="Quote not found")
