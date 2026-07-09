@@ -11,7 +11,7 @@ from app.schemas.work_order import (
     WorkOrderScheduleUpdate,
     WorkOrderSummary,
 )
-from app.services.matching_common import pagination
+from app.services.matching_common import CONTRACTOR_ROLES, CUSTOMER_ROLES, pagination
 
 WORK_ORDER_CANCELABLE_STATUSES = {"CREATED", "SCHEDULED"}
 WORK_ORDER_SCHEDULABLE_STATUSES = {"CREATED", "SCHEDULED"}
@@ -21,16 +21,16 @@ WORK_ORDER_COMPLETABLE_STATUSES = {"IN_PROGRESS"}
 
 def _has_work_order_access(user: User, work_order: WorkOrder) -> bool:
     return (
-        user.user_type == "CUSTOMER"
+        user.user_type in CUSTOMER_ROLES
         and work_order.customer_id == user.user_id
     ) or (
-        user.user_type == "CONTRACTOR"
+        user.user_type in CONTRACTOR_ROLES
         and work_order.contractor_id == user.user_id
     )
 
 
 def _require_contractor_owner(user: User, work_order: WorkOrder) -> None:
-    if user.user_type != "CONTRACTOR" or work_order.contractor_id != user.user_id:
+    if user.user_type not in CONTRACTOR_ROLES or work_order.contractor_id != user.user_id:
         raise HTTPException(status_code=403, detail="Contractor account required")
 
 
@@ -101,6 +101,11 @@ async def list_work_orders(
         filters.append(WorkOrder.customer_id == current_user.user_id)
     elif current_user.user_type == "CONTRACTOR":
         filters.append(WorkOrder.contractor_id == current_user.user_id)
+    elif current_user.user_type == "BOTH":
+        filters.append(
+            (WorkOrder.customer_id == current_user.user_id)
+            | (WorkOrder.contractor_id == current_user.user_id)
+        )
     else:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     if status_filter:
@@ -249,10 +254,10 @@ async def confirm_work_order(
 ) -> WorkOrder:
     work_order = await _get_owned_work_order_for_update(db, current_user, work_order_id)
     now = datetime.now(timezone.utc)
-    if current_user.user_type == "CUSTOMER" and work_order.customer_id == current_user.user_id:
+    if current_user.user_type in CUSTOMER_ROLES and work_order.customer_id == current_user.user_id:
         work_order.customer_confirmed_at = now
     elif (
-        current_user.user_type == "CONTRACTOR"
+        current_user.user_type in CONTRACTOR_ROLES
         and work_order.contractor_id == current_user.user_id
     ):
         work_order.contractor_confirmed_at = now

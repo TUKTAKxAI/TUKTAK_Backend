@@ -24,6 +24,9 @@ from app.schemas.auth import (
     LoginRequest,
 )
 
+CUSTOMER_ROLES = {"CUSTOMER", "BOTH"}
+CONTRACTOR_ROLES = {"CONTRACTOR", "BOTH"}
+
 
 def _unauthorized(detail: str = "Invalid credentials") -> HTTPException:
     return HTTPException(
@@ -34,7 +37,8 @@ def _unauthorized(detail: str = "Invalid credentials") -> HTTPException:
 
 
 async def is_email_available(db: AsyncSession, email: str) -> bool:
-    result = await db.execute(select(User.user_id).where(User.email == str(email)))
+    normalized_email = str(email).strip().lower()
+    result = await db.execute(select(User.user_id).where(User.email == normalized_email))
     return result.scalar_one_or_none() is None
 
 
@@ -65,28 +69,23 @@ def _validate_agreements(
     return [(agreement, catalog[agreement.terms_type]) for agreement in agreements]
 
 
-async def _create_user(
+async def _add_missing_agreements(
     db: AsyncSession,
+    user: User,
     payload: CustomerSignupRequest | ContractorSignupRequest,
-    user_type: str,
     ip_address: str | None,
-) -> User:
+) -> None:
     agreement_pairs = _validate_agreements(payload.agreements)
-    normalized_email = str(payload.email).strip().lower()
-    now = datetime.now(timezone.utc)
-    user = User(
-        login_id=normalized_email,
-        email=normalized_email,
-        password_hash=hash_password(payload.password),
-        nickname=payload.nickname,
-        name=payload.name,
-        phone=payload.phone,
-        default_address_json=payload.default_address_json,
-        user_type=user_type,
-        account_status="ACTIVE",
+    result = await db.execute(
+        select(UserAgreement.terms_type, UserAgreement.terms_version).where(
+            UserAgreement.user_id == user.user_id
+        )
     )
-    db.add(user)
-    await db.flush()
+    existing = {
+        (terms_type, terms_version)
+        for terms_type, terms_version in result.all()
+    }
+    now = datetime.now(timezone.utc)
 
     db.add_all(
         [
@@ -102,8 +101,45 @@ async def _create_user(
                 ip_address=ip_address,
             )
             for agreement, definition in agreement_pairs
+            if (agreement.terms_type, agreement.terms_version) not in existing
         ]
     )
+
+
+def _require_existing_account_password(user: User, password: str) -> None:
+    if user.password_hash is None or not verify_password(password, user.password_hash):
+        raise _unauthorized("Existing account password does not match")
+
+
+def _merge_user_type(current: str, added: str) -> str:
+    if current == "BOTH" or current == added:
+        return current
+    if {current, added} == {"CUSTOMER", "CONTRACTOR"}:
+        return "BOTH"
+    return added
+
+
+async def _create_user(
+    db: AsyncSession,
+    payload: CustomerSignupRequest | ContractorSignupRequest,
+    user_type: str,
+    ip_address: str | None,
+) -> User:
+    normalized_email = str(payload.email).strip().lower()
+    user = User(
+        login_id=normalized_email,
+        email=normalized_email,
+        password_hash=hash_password(payload.password),
+        nickname=payload.nickname,
+        name=payload.name,
+        phone=payload.phone,
+        default_address_json=payload.default_address_json,
+        user_type=user_type,
+        account_status="ACTIVE",
+    )
+    db.add(user)
+    await db.flush()
+    await _add_missing_agreements(db, user, payload, ip_address)
     return user
 
 
@@ -114,7 +150,26 @@ async def signup_customer(
 ) -> User:
     try:
         async with db.begin():
-            user = await _create_user(db, payload, "CUSTOMER", ip_address)
+            normalized_email = str(payload.email).strip().lower()
+            result = await db.execute(
+                select(User).where(User.email == normalized_email).with_for_update()
+            )
+            user = result.scalar_one_or_none()
+
+            if user is None:
+                user = await _create_user(db, payload, "CUSTOMER", ip_address)
+            else:
+                _require_existing_account_password(user, payload.password)
+                if user.user_type in CUSTOMER_ROLES:
+                    raise HTTPException(status_code=409, detail="Account already has customer access")
+                if payload.phone and user.phone and payload.phone != user.phone:
+                    raise HTTPException(status_code=409, detail="Phone does not match existing account")
+                if payload.default_address_json is not None:
+                    user.default_address_json = payload.default_address_json
+                if payload.phone and not user.phone:
+                    user.phone = payload.phone
+                user.user_type = _merge_user_type(user.user_type, "CUSTOMER")
+                await _add_missing_agreements(db, user, payload, ip_address)
         await db.refresh(user)
         return user
     except IntegrityError as exc:
@@ -129,7 +184,29 @@ async def signup_contractor(
 ) -> tuple[User, ContractorProfile]:
     try:
         async with db.begin():
-            user = await _create_user(db, payload, "CONTRACTOR", ip_address)
+            normalized_email = str(payload.email).strip().lower()
+            result = await db.execute(
+                select(User).where(User.email == normalized_email).with_for_update()
+            )
+            user = result.scalar_one_or_none()
+
+            if user is None:
+                user = await _create_user(db, payload, "CONTRACTOR", ip_address)
+            else:
+                _require_existing_account_password(user, payload.password)
+                if user.user_type in CONTRACTOR_ROLES:
+                    raise HTTPException(status_code=409, detail="Account already has contractor access")
+                if payload.phone and user.phone and payload.phone != user.phone:
+                    raise HTTPException(status_code=409, detail="Phone does not match existing account")
+                if payload.phone and not user.phone:
+                    user.phone = payload.phone
+                user.user_type = _merge_user_type(user.user_type, "CONTRACTOR")
+                await _add_missing_agreements(db, user, payload, ip_address)
+
+            existing_profile = await db.get(ContractorProfile, user.user_id)
+            if existing_profile is not None:
+                raise HTTPException(status_code=409, detail="Account already has contractor access")
+
             profile = ContractorProfile(
                 contractor_id=user.user_id,
                 business_name=payload.business_name,

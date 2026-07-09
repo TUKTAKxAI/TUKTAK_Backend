@@ -12,7 +12,7 @@ from app.schemas.matching_request import (
     MatchingRequestDetail,
     MatchingRequestSummary,
 )
-from app.services.matching_common import pagination, require_customer
+from app.services.matching_common import CONTRACTOR_ROLES, CUSTOMER_ROLES, pagination, require_customer
 
 MATCHING_REQUEST_EXPIRE_DAYS = 7
 MATCHING_CANCELABLE_STATUSES = {"REQUESTED", "RECEIVING_QUOTES"}
@@ -158,9 +158,10 @@ async def get_matching_request_detail(
         raise HTTPException(status_code=404, detail="Matching request not found")
 
     request, quote_count, work_order_id = row
-    if current_user.user_type == "CUSTOMER" and request.user_id != current_user.user_id:
-        raise HTTPException(status_code=404, detail="Matching request not found")
-    if current_user.user_type == "CONTRACTOR":
+    is_customer_owner = (
+        current_user.user_type in CUSTOMER_ROLES and request.user_id == current_user.user_id
+    )
+    if current_user.user_type in CONTRACTOR_ROLES and not is_customer_owner:
         allowed = await db.scalar(
             select(MatchingTarget.matching_target_id).where(
                 MatchingTarget.matching_request_id == matching_request_id,
@@ -169,7 +170,9 @@ async def get_matching_request_detail(
         )
         if allowed is None:
             raise HTTPException(status_code=404, detail="Matching request not found")
-    if current_user.user_type not in {"CUSTOMER", "CONTRACTOR"}:
+    elif current_user.user_type in CUSTOMER_ROLES and not is_customer_owner:
+        raise HTTPException(status_code=404, detail="Matching request not found")
+    if current_user.user_type not in CUSTOMER_ROLES | CONTRACTOR_ROLES:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
     summary = summary_from_request(request, quote_count, work_order_id)
