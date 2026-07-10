@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import MatchingRequest, MatchingTarget, Quote, User
+from app.db.models import MatchingRequest, MatchingTarget, Quote, ReferenceCode, ServiceTask, User
 from app.schemas.contractor_matching import (
     ContractorMatchingDecline,
     ContractorMatchingRequestSummary,
@@ -30,10 +30,24 @@ async def list_contractor_matching_requests(
 
     total = await db.scalar(select(func.count()).select_from(MatchingTarget).where(*filters))
     result = await db.execute(
-        select(MatchingTarget, MatchingRequest, Quote.quote_id)
+        select(
+            MatchingTarget,
+            MatchingRequest,
+            Quote.quote_id,
+            ReferenceCode.code_name.label("region_name"),
+            ServiceTask.task_name.label("service_task_name"),
+        )
         .join(
             MatchingRequest,
             MatchingRequest.matching_request_id == MatchingTarget.matching_request_id,
+        )
+        .outerjoin(
+            ReferenceCode,
+            ReferenceCode.code_id == MatchingRequest.region_code_id,
+        )
+        .outerjoin(
+            ServiceTask,
+            ServiceTask.service_task_id == MatchingRequest.service_task_id,
         )
         .outerjoin(
             Quote,
@@ -51,16 +65,22 @@ async def list_contractor_matching_requests(
             matching_target_id=target.matching_target_id,
             title=request.title,
             service_task_id=request.service_task_id,
+            service_task_name=service_task_name,
             region_code_id=request.region_code_id,
+            region_name=region_name,
+            address=request.address,
             preferred_date=request.preferred_date,
+            preferred_time_start=request.preferred_time_start,
+            preferred_time_end=request.preferred_time_end,
             budget_min=request.budget_min,
             budget_max=request.budget_max,
+            request_message=request.request_message,
             matching_status=request.matching_status,
             target_status=target.target_status,
             quote_id=quote_id,
             created_at=target.created_at,
         )
-        for target, request, quote_id in result.all()
+        for target, request, quote_id, region_name, service_task_name in result.all()
     ]
     return items, page, size, int(total or 0)
 
