@@ -24,11 +24,22 @@ async def list_contractor_matching_requests(
 ) -> tuple[list[ContractorMatchingRequestSummary], int, int, int]:
     require_contractor(current_user)
     page, size = pagination(page, size)
-    filters = [MatchingTarget.contractor_id == current_user.user_id]
+    filters = [
+        MatchingTarget.contractor_id == current_user.user_id,
+        MatchingRequest.matching_status.in_(OPEN_MATCHING_STATUSES),
+    ]
     if target_status:
         filters.append(MatchingTarget.target_status == target_status)
 
-    total = await db.scalar(select(func.count()).select_from(MatchingTarget).where(*filters))
+    total = await db.scalar(
+        select(func.count())
+        .select_from(MatchingTarget)
+        .join(
+            MatchingRequest,
+            MatchingRequest.matching_request_id == MatchingTarget.matching_request_id,
+        )
+        .where(*filters)
+    )
     result = await db.execute(
         select(
             MatchingTarget,
