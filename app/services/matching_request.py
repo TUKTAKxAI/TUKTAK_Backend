@@ -22,6 +22,7 @@ from app.schemas.matching_request import (
     MatchingRequestSummary,
 )
 from app.services.matching_common import CONTRACTOR_ROLES, CUSTOMER_ROLES, pagination, require_customer
+from app.services.notification import create_notification
 
 MATCHING_REQUEST_EXPIRE_DAYS = 7
 MATCHING_CANCELABLE_STATUSES = {"REQUESTED", "RECEIVING_QUOTES"}
@@ -143,6 +144,16 @@ async def create_matching_request(
                 for contractor_id in contractor_ids
             ]
         )
+        for contractor_id in contractor_ids:
+            await create_notification(
+                db,
+                user_id=contractor_id,
+                notification_type="MATCHING_REQUEST_NEW",
+                title="새로운 시공 요청이 도착했습니다",
+                content=f"'{matching_request.title}' 시공 요청이 도착했습니다.",
+                target_type="MATCHING_REQUEST",
+                target_id=matching_request.matching_request_id,
+            )
         await db.commit()
         await db.refresh(matching_request)
         return matching_request

@@ -9,6 +9,8 @@ from app.db.models import (
     MatchingRequest,
     MatchingTarget,
     Quote,
+    ReferenceCode,
+    ServiceTask,
     User,
     WorkOrder,
 )
@@ -21,6 +23,7 @@ from app.services.matching_common import (
     require_customer,
 )
 from app.services.matching_request import get_matching_request_detail
+from app.services.notification import create_notification
 
 
 QUOTE_OPEN_MATCHING_STATUSES = {"REQUESTED", "RECEIVING_QUOTES"}
@@ -87,6 +90,15 @@ async def create_quote(
         matching_target.target_status = "QUOTED"
         matching_request.matching_status = "RECEIVING_QUOTES"
         db.add(quote)
+    await create_notification(
+        db,
+        user_id=matching_request.user_id,
+        notification_type="QUOTE_RECEIVED",
+        title="새로운 견적이 도착했습니다",
+        content=f"'{matching_request.title}' 요청에 새로운 견적이 도착했습니다.",
+        target_type="MATCHING_REQUEST",
+        target_id=matching_request.matching_request_id,
+    )
     await db.commit()
     await db.refresh(quote)
     return quote
@@ -151,8 +163,15 @@ async def list_contractor_quotes(
 
     total = await db.scalar(select(func.count()).select_from(Quote).where(*filters))
     result = await db.execute(
-        select(Quote, MatchingRequest.title, MatchingRequest.matching_status)
+        select(
+            Quote,
+            MatchingRequest,
+            ReferenceCode.code_name.label("region_name"),
+            ServiceTask.task_name.label("service_task_name"),
+        )
         .join(MatchingRequest, MatchingRequest.matching_request_id == Quote.matching_request_id)
+        .outerjoin(ReferenceCode, ReferenceCode.code_id == MatchingRequest.region_code_id)
+        .outerjoin(ServiceTask, ServiceTask.service_task_id == MatchingRequest.service_task_id)
         .where(*filters)
         .order_by(Quote.created_at.desc())
         .offset((page - 1) * size)
@@ -162,8 +181,19 @@ async def list_contractor_quotes(
         ContractorQuoteSummary(
             quote_id=quote.quote_id,
             matching_request_id=quote.matching_request_id,
-            matching_request_title=matching_request_title,
-            matching_status=matching_status,
+            matching_request_title=matching_request.title,
+            service_task_id=matching_request.service_task_id,
+            service_task_name=service_task_name,
+            region_code_id=matching_request.region_code_id,
+            region_name=region_name,
+            address=matching_request.address,
+            preferred_date=matching_request.preferred_date,
+            preferred_time_start=matching_request.preferred_time_start,
+            preferred_time_end=matching_request.preferred_time_end,
+            budget_min=matching_request.budget_min,
+            budget_max=matching_request.budget_max,
+            request_message=matching_request.request_message,
+            matching_status=matching_request.matching_status,
             quote_status=quote.quote_status,
             total_amount=quote.total_amount,
             work_scope=quote.work_scope,
@@ -175,7 +205,7 @@ async def list_contractor_quotes(
             selected_at=quote.selected_at,
             created_at=quote.created_at,
         )
-        for quote, matching_request_title, matching_status in result.all()
+        for quote, matching_request, region_name, service_task_name in result.all()
     ]
     return items, page, size, int(total or 0)
 
@@ -330,6 +360,15 @@ async def select_quote(
             scheduled_date=quote.available_date,
         )
         db.add(work_order)
+    await create_notification(
+        db,
+        user_id=quote.contractor_id,
+        notification_type="MATCHING_SELECTED",
+        title="매칭이 성사되었습니다",
+        content=f"'{matching_request.title}' 요청에서 시공자로 선택되었습니다.",
+        target_type="MATCHING_REQUEST",
+        target_id=matching_request.matching_request_id,
+    )
     await db.commit()
     await db.refresh(matching_request)
     await db.refresh(quote)
