@@ -40,6 +40,8 @@ class Settings(BaseSettings):
         alias="AUTH_COOKIE_SAMESITE",
     )
     ai_stub_delay_seconds: float = Field(3.0, ge=0, alias="AI_STUB_DELAY_SECONDS")
+    ai_service_url: str = Field("http://localhost:8001", alias="AI_SERVICE_URL")
+    ai_service_timeout_seconds: float = Field(60.0, gt=0, alias="AI_SERVICE_TIMEOUT_SECONDS")
 
     terms_of_service_version: str = Field("1.0", alias="TERMS_OF_SERVICE_VERSION")
     privacy_policy_version: str = Field("1.0", alias="PRIVACY_POLICY_VERSION")
