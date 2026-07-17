@@ -12,6 +12,7 @@ from app.schemas.work_order import (
     WorkOrderSummary,
 )
 from app.services.matching_common import CONTRACTOR_ROLES, CUSTOMER_ROLES, pagination
+from app.services.notification import create_notification
 
 WORK_ORDER_CANCELABLE_STATUSES = {"CREATED", "SCHEDULED"}
 WORK_ORDER_SCHEDULABLE_STATUSES = {"CREATED", "SCHEDULED"}
@@ -37,12 +38,14 @@ def _require_contractor_owner(user: User, work_order: WorkOrder) -> None:
 def _summary_from_row(
     work_order: WorkOrder,
     matching_request_title: str,
+    address: str | None,
     contractor_name: str | None,
 ) -> WorkOrderSummary:
     return WorkOrderSummary(
         work_order_id=work_order.work_order_id,
         matching_request_id=work_order.matching_request_id,
         matching_request_title=matching_request_title,
+        address=address,
         quote_id=work_order.quote_id,
         customer_id=work_order.customer_id,
         contractor_id=work_order.contractor_id,
@@ -58,6 +61,7 @@ def _summary_from_row(
 def _detail_from_row(
     work_order: WorkOrder,
     matching_request_title: str,
+    address: str | None,
     customer_name: str,
     contractor_name: str | None,
 ) -> WorkOrderDetail:
@@ -65,6 +69,7 @@ def _detail_from_row(
         work_order_id=work_order.work_order_id,
         matching_request_id=work_order.matching_request_id,
         matching_request_title=matching_request_title,
+        address=address,
         quote_id=work_order.quote_id,
         customer_id=work_order.customer_id,
         customer_name=customer_name,
@@ -113,7 +118,7 @@ async def list_work_orders(
 
     total = await db.scalar(select(func.count()).select_from(WorkOrder).where(*filters))
     result = await db.execute(
-        select(WorkOrder, MatchingRequest.title, ContractorProfile.business_name)
+        select(WorkOrder, MatchingRequest.title, MatchingRequest.address, ContractorProfile.business_name)
         .join(
             MatchingRequest,
             MatchingRequest.matching_request_id == WorkOrder.matching_request_id,
@@ -128,8 +133,8 @@ async def list_work_orders(
         .limit(size)
     )
     items = [
-        _summary_from_row(work_order, matching_request_title, contractor_name)
-        for work_order, matching_request_title, contractor_name in result.all()
+        _summary_from_row(work_order, matching_request_title, address, contractor_name)
+        for work_order, matching_request_title, address, contractor_name in result.all()
     ]
     return items, page, size, int(total or 0)
 
@@ -143,6 +148,7 @@ async def get_work_order_detail(
         select(
             WorkOrder,
             MatchingRequest.title,
+            MatchingRequest.address,
             User.name,
             ContractorProfile.business_name,
         )
@@ -161,13 +167,14 @@ async def get_work_order_detail(
     if row is None:
         raise HTTPException(status_code=404, detail="Work order not found")
 
-    work_order, matching_request_title, customer_name, contractor_name = row
+    work_order, matching_request_title, address, customer_name, contractor_name = row
     if not _has_work_order_access(current_user, work_order):
         raise HTTPException(status_code=404, detail="Work order not found")
 
     return _detail_from_row(
         work_order,
         matching_request_title,
+        address,
         customer_name,
         contractor_name,
     )
@@ -223,6 +230,15 @@ async def start_work_order(
     work_order.started_at = now
     if work_order.contact_revealed_at is None:
         work_order.contact_revealed_at = now
+    await create_notification(
+        db,
+        user_id=work_order.customer_id,
+        notification_type="WORK_ORDER_STARTED",
+        title="시공이 시작되었습니다",
+        content="예약하신 시공이 시작되었습니다.",
+        target_type="WORK_ORDER",
+        target_id=work_order.work_order_id,
+    )
     await db.commit()
     await db.refresh(work_order)
     return work_order
@@ -242,6 +258,15 @@ async def complete_work_order(
     work_order.work_order_status = "COMPLETED"
     work_order.completed_at = now
     work_order.contractor_confirmed_at = now
+    await create_notification(
+        db,
+        user_id=work_order.customer_id,
+        notification_type="WORK_ORDER_COMPLETED",
+        title="시공이 완료되었습니다",
+        content="예약하신 시공이 완료되었습니다.",
+        target_type="WORK_ORDER",
+        target_id=work_order.work_order_id,
+    )
     await db.commit()
     await db.refresh(work_order)
     return work_order
@@ -271,6 +296,15 @@ async def confirm_work_order(
     ):
         work_order.work_order_status = "COMPLETED"
         work_order.completed_at = now
+        await create_notification(
+            db,
+            user_id=work_order.customer_id,
+            notification_type="WORK_ORDER_COMPLETED",
+            title="시공이 완료되었습니다",
+            content="예약하신 시공이 완료되었습니다.",
+            target_type="WORK_ORDER",
+            target_id=work_order.work_order_id,
+        )
     await db.commit()
     await db.refresh(work_order)
     return work_order
@@ -289,6 +323,15 @@ async def cancel_work_order(
     work_order.work_order_status = "CANCELLED"
     work_order.cancel_reason = payload.cancel_reason
     work_order.cancelled_at = datetime.now(timezone.utc)
+    await create_notification(
+        db,
+        user_id=work_order.customer_id,
+        notification_type="WORK_ORDER_CANCELLED",
+        title="시공이 취소되었습니다",
+        content="예약하신 시공이 취소되었습니다.",
+        target_type="WORK_ORDER",
+        target_id=work_order.work_order_id,
+    )
     await db.commit()
     await db.refresh(work_order)
     return work_order

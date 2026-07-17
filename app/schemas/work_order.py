@@ -8,6 +8,7 @@ class WorkOrderSummary(BaseModel):
     work_order_id: int
     matching_request_id: int
     matching_request_title: str
+    address: str | None = None
     quote_id: int
     customer_id: int
     contractor_id: int
@@ -23,6 +24,7 @@ class WorkOrderDetail(BaseModel):
     work_order_id: int
     matching_request_id: int
     matching_request_title: str
+    address: str | None = None
     quote_id: int
     customer_id: int
     customer_name: str
