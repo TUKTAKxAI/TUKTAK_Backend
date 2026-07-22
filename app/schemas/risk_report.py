@@ -38,6 +38,7 @@ class RiskReportDetail(BaseModel):
     risk_score: int
     risk_level: str
     summary: str
+    failure_reason: str | None = None
     risk_items: list[dict[str, Any]] | None = None
     checklist: list[dict[str, Any]] | None = None
     additional_cost_risks: list[dict[str, Any]] | None = None
@@ -45,6 +46,8 @@ class RiskReportDetail(BaseModel):
     contract_risks: list[dict[str, Any]] | None = None
     field_variable_risks: list[dict[str, Any]] | None = None
     sources: list[dict[str, Any]] = []
+    model_name: str | None = None
+    model_version: str | None = None
     created_at: datetime
     completed_at: datetime | None = None
     updated_at: datetime

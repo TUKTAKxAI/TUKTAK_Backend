@@ -1,10 +1,12 @@
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.crud import risk_report as risk_report_crud
+from app.db.models import AiEstimate
 from app.db.models.risk_report import RiskReport
 from app.schemas.risk_report import RiskReportCreateRequest
-from app.services import ai_stub
+from app.services.risk_report_client import complete_risk_report_with_ai_service
 
 
 async def create_risk_report(
@@ -12,12 +14,28 @@ async def create_risk_report(
     user_id: int,
     payload: RiskReportCreateRequest,
 ) -> RiskReport:
+    estimate = await db.scalar(
+        select(AiEstimate).where(
+            AiEstimate.estimate_id == payload.estimate_id,
+            AiEstimate.user_id == user_id,
+        )
+    )
+    if estimate is None:
+        raise HTTPException(status_code=404, detail="AI estimate not found")
+    if estimate.estimate_status != "COMPLETED":
+        raise HTTPException(status_code=409, detail="Only completed AI estimates can be used for risk reports")
+
     risk_report = await risk_report_crud.create_risk_report(
         db=db,
         user_id=user_id,
         estimate_id=payload.estimate_id,
     )
-    await ai_stub.complete_risk_report(db, risk_report)
+    try:
+        await complete_risk_report_with_ai_service(db, risk_report, estimate)
+    except Exception as exc:
+        risk_report.report_status = "FAILED"
+        risk_report.failure_reason = str(exc)
+        risk_report.summary = "AI 리스크 리포트 생성 중 오류가 발생했습니다."
     await db.commit()
     await db.refresh(risk_report)
     return risk_report

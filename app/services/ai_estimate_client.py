@@ -74,7 +74,7 @@ def _apply_completed_estimate(estimate: AiEstimate, ai_estimate: dict[str, Any])
     estimate.estimated_minutes_min = expected_duration
     estimate.estimated_minutes_max = expected_duration
     estimate.confidence_score = Decimal(str(ai_estimate.get("confidence_score") or 0)).quantize(Decimal("0.0001"))
-    estimate.ai_summary = _build_completed_summary(ai_estimate)
+    estimate.ai_summary = ai_estimate.get("summary") or _build_completed_summary(ai_estimate)
     estimate.estimate_status = "COMPLETED"
 
 
