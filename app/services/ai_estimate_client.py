@@ -20,12 +20,14 @@ class AiEstimateServiceResult:
 async def complete_ai_estimate_with_ai_service(
     estimate: AiEstimate,
     image_paths: list[str] | None = None,
+    image_s3_keys: list[str] | None = None,
 ) -> AiEstimateServiceResult:
     payload = {
         "request_id": str(estimate.estimate_id),
         "description": estimate.description,
         "image_urls": estimate.image_urls or [],
         "image_paths": image_paths or [],
+        "image_s3_keys": image_s3_keys or [],
         "main_category_hint": None if estimate.main_category == "UNKNOWN" else estimate.main_category,
         "region_code": str(estimate.region_code_id) if estimate.region_code_id is not None else None,
     }

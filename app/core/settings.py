@@ -42,6 +42,9 @@ class Settings(BaseSettings):
     ai_stub_delay_seconds: float = Field(3.0, ge=0, alias="AI_STUB_DELAY_SECONDS")
     ai_service_url: str = Field("http://localhost:8001", alias="AI_SERVICE_URL")
     ai_service_timeout_seconds: float = Field(60.0, gt=0, alias="AI_SERVICE_TIMEOUT_SECONDS")
+    aws_region: str = Field("ap-northeast-2", alias="AWS_REGION")
+    s3_bucket_name: str | None = Field(None, alias="S3_BUCKET_NAME")
+    ai_estimate_image_prefix: str = Field("ai-estimates", alias="AI_ESTIMATE_IMAGE_PREFIX")
 
     terms_of_service_version: str = Field("1.0", alias="TERMS_OF_SERVICE_VERSION")
     privacy_policy_version: str = Field("1.0", alias="PRIVACY_POLICY_VERSION")
