@@ -1,6 +1,3 @@
-import tempfile
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +14,7 @@ from app.schemas.common import (
     AiEstimateRetryResponse,
 )
 from app.services.ai_estimate_client import complete_ai_estimate_with_ai_service
+from app.services.s3_image_storage import S3ImageStorage, StoredImage
 
 router = APIRouter(tags=["AI Estimate"])
 
@@ -45,17 +43,31 @@ async def _normalize_region_code_id(
     return region_code_id
 
 
-async def _save_uploaded_images_for_ai_service(
+async def _upload_images_for_ai_service(
+    *,
+    estimate_id: int,
+    user_id: int,
     images: list[UploadFile] | None,
-    temp_dir: str,
-) -> list[str]:
-    saved_paths: list[str] = []
-    for index, image in enumerate(images or []):
-        suffix = Path(image.filename or "").suffix or ".bin"
-        image_path = Path(temp_dir) / f"estimate-image-{index}{suffix}"
-        image_path.write_bytes(await image.read())
-        saved_paths.append(str(image_path))
-    return saved_paths
+) -> list[StoredImage]:
+    return await S3ImageStorage().upload_ai_estimate_images(
+        estimate_id=estimate_id,
+        user_id=user_id,
+        images=images,
+    )
+
+
+async def _delete_uploaded_images(stored_images: list[StoredImage]) -> None:
+    await S3ImageStorage().delete_images(stored_images)
+
+
+def _s3_keys_from_image_urls(image_urls: list[str] | None) -> list[str]:
+    keys: list[str] = []
+    for image_url in image_urls or []:
+        if image_url.startswith("s3://"):
+            parts = image_url.removeprefix("s3://").split("/", 1)
+            if len(parts) == 2 and parts[1]:
+                keys.append(parts[1])
+    return keys
 
 
 @router.post("/ai-estimates", response_model=AiEstimateCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -85,9 +97,20 @@ async def create_ai_estimate(
     )
     db.add(estimate)
     await db.flush()
-    with tempfile.TemporaryDirectory(prefix="tuktak-ai-estimate-") as temp_dir:
-        image_paths = await _save_uploaded_images_for_ai_service(images, temp_dir)
-        ai_result = await complete_ai_estimate_with_ai_service(estimate, image_paths=image_paths)
+    stored_images = await _upload_images_for_ai_service(
+        estimate_id=estimate.estimate_id,
+        user_id=current_user.user_id,
+        images=images,
+    )
+    estimate.image_urls = [image.uri for image in stored_images]
+    try:
+        ai_result = await complete_ai_estimate_with_ai_service(
+            estimate,
+            image_s3_keys=[image.key for image in stored_images],
+        )
+    except Exception:
+        await _delete_uploaded_images(stored_images)
+        raise
     await db.commit()
     await db.refresh(estimate)
     return AiEstimateCreateResponse(
@@ -159,11 +182,23 @@ async def retry_ai_estimate(
     if description is not None:
         estimate.description = description
     if images:
-        estimate.image_urls = [f"/uploads/ai-estimates/{current_user.user_id}/{img.filename}" for img in images]
+        stored_images = await _upload_images_for_ai_service(
+            estimate_id=estimate.estimate_id,
+            user_id=current_user.user_id,
+            images=images,
+        )
+        estimate.image_urls = [image.uri for image in stored_images]
+    else:
+        stored_images = []
     estimate.estimate_status = "PROCESSING"
-    with tempfile.TemporaryDirectory(prefix="tuktak-ai-estimate-") as temp_dir:
-        image_paths = await _save_uploaded_images_for_ai_service(images, temp_dir)
-        ai_result = await complete_ai_estimate_with_ai_service(estimate, image_paths=image_paths)
+    try:
+        ai_result = await complete_ai_estimate_with_ai_service(
+            estimate,
+            image_s3_keys=[image.key for image in stored_images] or _s3_keys_from_image_urls(estimate.image_urls),
+        )
+    except Exception:
+        await _delete_uploaded_images(stored_images)
+        raise
     await db.commit()
     await db.refresh(estimate)
     return AiEstimateRetryResponse(
