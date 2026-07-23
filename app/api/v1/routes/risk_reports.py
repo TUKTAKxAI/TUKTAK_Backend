@@ -86,6 +86,7 @@ async def get_risk_report_detail(
             risk_score=risk_report.risk_score,
             risk_level=risk_report.risk_level,
             summary=risk_report.summary,
+            failure_reason=risk_report.failure_reason,
             risk_items=risk_report.risk_items_json,
             checklist=risk_report.checklist_json,
             additional_cost_risks=risk_report.additional_cost_risks_json,
@@ -103,6 +104,8 @@ async def get_risk_report_detail(
                 }
                 for source, doc in rows
             ],
+            model_name=risk_report.model_name,
+            model_version=risk_report.model_version,
             created_at=risk_report.created_at,
             completed_at=risk_report.completed_at,
             updated_at=risk_report.updated_at,

@@ -5,7 +5,16 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import ContractorProfile, MatchingRequest, MatchingTarget, Quote, User, WorkOrder
+from app.db.models import (
+    ContractorProfile,
+    ContractorService,
+    MatchingRequest,
+    MatchingTarget,
+    Quote,
+    ReferenceCode,
+    User,
+    WorkOrder,
+)
 from app.schemas.matching_request import (
     MatchingRequestCancel,
     MatchingRequestCreate,
@@ -13,23 +22,79 @@ from app.schemas.matching_request import (
     MatchingRequestSummary,
 )
 from app.services.matching_common import CONTRACTOR_ROLES, CUSTOMER_ROLES, pagination, require_customer
+from app.services.notification import create_notification
 
 MATCHING_REQUEST_EXPIRE_DAYS = 7
 MATCHING_CANCELABLE_STATUSES = {"REQUESTED", "RECEIVING_QUOTES"}
 
 
-async def _find_candidate_contractors(db: AsyncSession, limit: int = 10) -> list[int]:
+async def _resolve_region_code_id(db: AsyncSession, raw_region_code_id: int | None) -> int | None:
+    if raw_region_code_id is None:
+        return None
+
+    direct_code_id = await db.scalar(
+        select(ReferenceCode.code_id).where(
+            ReferenceCode.code_group == "REGION",
+            ReferenceCode.code_id == raw_region_code_id,
+            ReferenceCode.is_active.is_(True),
+        )
+    )
+    if direct_code_id is not None:
+        return direct_code_id
+
+    raw_code = str(raw_region_code_id)
+    candidate_codes = [raw_code[:5], raw_code[:2]]
+    for code in candidate_codes:
+        if not code:
+            continue
+        code_id = await db.scalar(
+            select(ReferenceCode.code_id).where(
+                ReferenceCode.code_group == "REGION",
+                ReferenceCode.code == code,
+                ReferenceCode.is_active.is_(True),
+            )
+        )
+        if code_id is not None:
+            return code_id
+
+    return raw_region_code_id
+
+
+async def _find_candidate_contractors(
+    db: AsyncSession,
+    region_code_id: int | None,
+    service_task_id: int | None,
+) -> list[int]:
+    filters = [
+        ContractorProfile.approval_status == "APPROVED",
+        ContractorProfile.available_status == "AVAILABLE",
+        ContractorProfile.matching_alert_enabled.is_(True),
+        ContractorService.is_active.is_(True),
+    ]
+    if region_code_id is not None:
+        filters.append(ContractorService.region_code_id == region_code_id)
+    if service_task_id is not None:
+        filters.append(ContractorService.service_task_id == service_task_id)
+
     result = await db.execute(
         select(ContractorProfile.contractor_id)
+        .join(
+            ContractorService,
+            ContractorService.contractor_id == ContractorProfile.contractor_id,
+        )
         .where(
-            ContractorProfile.approval_status == "APPROVED",
-            ContractorProfile.available_status == "AVAILABLE",
-            ContractorProfile.matching_alert_enabled.is_(True),
+            *filters,
         )
         .order_by(ContractorProfile.rating_avg.desc(), ContractorProfile.review_count.desc())
-        .limit(limit)
     )
-    return list(result.scalars().all())
+    contractor_ids = []
+    seen = set()
+    for contractor_id in result.scalars().all():
+        if contractor_id in seen:
+            continue
+        seen.add(contractor_id)
+        contractor_ids.append(contractor_id)
+    return contractor_ids
 
 
 async def create_matching_request(
@@ -40,13 +105,18 @@ async def create_matching_request(
     require_customer(current_user)
     now = datetime.now(timezone.utc)
     try:
-        contractor_ids = await _find_candidate_contractors(db)
+        region_code_id = await _resolve_region_code_id(db, payload.region_code_id)
+        contractor_ids = await _find_candidate_contractors(
+            db,
+            region_code_id=region_code_id,
+            service_task_id=payload.service_task_id,
+        )
         matching_request = MatchingRequest(
             user_id=current_user.user_id,
             estimate_id=payload.estimate_id,
             service_task_id=payload.service_task_id,
             title=payload.title.strip(),
-            region_code_id=payload.region_code_id,
+            region_code_id=region_code_id,
             address=payload.address,
             preferred_date=payload.preferred_date,
             preferred_time_start=payload.preferred_time_start,
@@ -74,6 +144,16 @@ async def create_matching_request(
                 for contractor_id in contractor_ids
             ]
         )
+        for contractor_id in contractor_ids:
+            await create_notification(
+                db,
+                user_id=contractor_id,
+                notification_type="MATCHING_REQUEST_NEW",
+                title="새로운 시공 요청이 도착했습니다",
+                content=f"'{matching_request.title}' 시공 요청이 도착했습니다.",
+                target_type="MATCHING_REQUEST",
+                target_id=matching_request.matching_request_id,
+            )
         await db.commit()
         await db.refresh(matching_request)
         return matching_request

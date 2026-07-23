@@ -72,6 +72,10 @@ class AiEstimateCreateResponse(BaseModel):
     estimate_id: int
     estimate_status: str
     created_at: datetime
+    response_status: str | None = None
+    code: str | None = None
+    message: str | None = None
+    missing_info: list[str] = Field(default_factory=list)
 
 
 class AiEstimateDetail(BaseModel):
@@ -123,6 +127,10 @@ class AiEstimateRetryResponse(BaseModel):
     estimate_id: int
     estimate_status: str
     updated_at: datetime
+    response_status: str | None = None
+    code: str | None = None
+    message: str | None = None
+    missing_info: list[str] = Field(default_factory=list)
 
 
 class RagDocumentCreateResponse(BaseModel):

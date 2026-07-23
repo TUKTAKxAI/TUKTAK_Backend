@@ -54,6 +54,17 @@ class ContractorQuoteSummary(BaseModel):
     quote_id: int
     matching_request_id: int
     matching_request_title: str
+    service_task_id: int | None = None
+    service_task_name: str | None = None
+    region_code_id: int | None = None
+    region_name: str | None = None
+    address: str | None = None
+    preferred_date: datetime | None = None
+    preferred_time_start: str | None = None
+    preferred_time_end: str | None = None
+    budget_min: Decimal | None = None
+    budget_max: Decimal | None = None
+    request_message: str | None = None
     matching_status: str
     quote_status: str
     total_amount: Decimal

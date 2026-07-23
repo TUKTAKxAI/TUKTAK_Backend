@@ -1,3 +1,6 @@
+import tempfile
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,7 +16,7 @@ from app.schemas.common import (
     AiEstimateListResponse,
     AiEstimateRetryResponse,
 )
-from app.services import ai_stub
+from app.services.ai_estimate_client import complete_ai_estimate_with_ai_service
 
 router = APIRouter(tags=["AI Estimate"])
 
@@ -40,6 +43,19 @@ async def _normalize_region_code_id(
             },
         )
     return region_code_id
+
+
+async def _save_uploaded_images_for_ai_service(
+    images: list[UploadFile] | None,
+    temp_dir: str,
+) -> list[str]:
+    saved_paths: list[str] = []
+    for index, image in enumerate(images or []):
+        suffix = Path(image.filename or "").suffix or ".bin"
+        image_path = Path(temp_dir) / f"estimate-image-{index}{suffix}"
+        image_path.write_bytes(await image.read())
+        saved_paths.append(str(image_path))
+    return saved_paths
 
 
 @router.post("/ai-estimates", response_model=AiEstimateCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -69,13 +85,19 @@ async def create_ai_estimate(
     )
     db.add(estimate)
     await db.flush()
-    await ai_stub.complete_ai_estimate(estimate)
+    with tempfile.TemporaryDirectory(prefix="tuktak-ai-estimate-") as temp_dir:
+        image_paths = await _save_uploaded_images_for_ai_service(images, temp_dir)
+        ai_result = await complete_ai_estimate_with_ai_service(estimate, image_paths=image_paths)
     await db.commit()
     await db.refresh(estimate)
     return AiEstimateCreateResponse(
         estimate_id=estimate.estimate_id,
         estimate_status=estimate.estimate_status,
         created_at=estimate.created_at,
+        response_status=ai_result.response_status,
+        code=ai_result.code,
+        message=ai_result.message,
+        missing_info=ai_result.missing_info,
     )
 
 
@@ -132,18 +154,24 @@ async def retry_ai_estimate(
     estimate = result.scalar_one_or_none()
     if estimate is None:
         raise HTTPException(status_code=404, detail="AI estimate not found")
-    if estimate.estimate_status != "FAILED":
-        raise HTTPException(status_code=409, detail="Only failed estimates can be retried")
+    if estimate.estimate_status not in {"FAILED", "NEEDS_MORE_INFO"}:
+        raise HTTPException(status_code=409, detail="Only failed or needs-more-info estimates can be retried")
     if description is not None:
         estimate.description = description
     if images:
         estimate.image_urls = [f"/uploads/ai-estimates/{current_user.user_id}/{img.filename}" for img in images]
     estimate.estimate_status = "PROCESSING"
-    await ai_stub.complete_ai_estimate(estimate)
+    with tempfile.TemporaryDirectory(prefix="tuktak-ai-estimate-") as temp_dir:
+        image_paths = await _save_uploaded_images_for_ai_service(images, temp_dir)
+        ai_result = await complete_ai_estimate_with_ai_service(estimate, image_paths=image_paths)
     await db.commit()
     await db.refresh(estimate)
     return AiEstimateRetryResponse(
         estimate_id=estimate.estimate_id,
         estimate_status=estimate.estimate_status,
         updated_at=estimate.updated_at,
+        response_status=ai_result.response_status,
+        code=ai_result.code,
+        message=ai_result.message,
+        missing_info=ai_result.missing_info,
     )
