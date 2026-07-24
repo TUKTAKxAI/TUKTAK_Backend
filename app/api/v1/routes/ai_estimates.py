@@ -141,7 +141,7 @@ async def get_ai_estimate(
 
 @router.get("/users/me/ai-estimates", response_model=AiEstimateListResponse)
 async def get_my_ai_estimates(
-    status_filter: str | None = Query(None, alias="status"),
+    status_filter: str | None = Query("COMPLETED", alias="status"),
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
