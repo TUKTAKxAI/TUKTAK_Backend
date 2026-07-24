@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_current_user
+from app.core.settings import settings
 from app.db.database import get_db
 from app.db.models import AiEstimate, ReferenceCode, User
 from app.schemas.common import (
@@ -70,6 +71,18 @@ def _s3_keys_from_image_urls(image_urls: list[str] | None) -> list[str]:
     return keys
 
 
+def _s3_keys_from_stored_images(stored_images: list[StoredImage]) -> list[str]:
+    return [image.key for image in stored_images if image.bucket]
+
+
+def _local_paths_from_stored_images(stored_images: list[StoredImage]) -> list[str]:
+    return [
+        str((settings.local_upload_path / image.key).resolve())
+        for image in stored_images
+        if not image.bucket
+    ]
+
+
 @router.post("/ai-estimates", response_model=AiEstimateCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_ai_estimate(
     description: str = Form(...),
@@ -106,7 +119,8 @@ async def create_ai_estimate(
     try:
         ai_result = await complete_ai_estimate_with_ai_service(
             estimate,
-            image_s3_keys=[image.key for image in stored_images],
+            image_paths=_local_paths_from_stored_images(stored_images),
+            image_s3_keys=_s3_keys_from_stored_images(stored_images),
         )
     except Exception:
         await _delete_uploaded_images(stored_images)
@@ -194,7 +208,8 @@ async def retry_ai_estimate(
     try:
         ai_result = await complete_ai_estimate_with_ai_service(
             estimate,
-            image_s3_keys=[image.key for image in stored_images] or _s3_keys_from_image_urls(estimate.image_urls),
+            image_paths=_local_paths_from_stored_images(stored_images),
+            image_s3_keys=_s3_keys_from_stored_images(stored_images) or _s3_keys_from_image_urls(estimate.image_urls),
         )
     except Exception:
         await _delete_uploaded_images(stored_images)
