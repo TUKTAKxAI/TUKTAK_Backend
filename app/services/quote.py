@@ -23,6 +23,7 @@ from app.services.matching_common import (
     require_contractor,
     require_customer,
 )
+from app.services.chat import create_room_for_work_order
 from app.services.matching_request import get_matching_request_detail
 from app.services.notification import create_notification
 from app.services.s3_image_storage import display_image_urls
@@ -378,6 +379,8 @@ async def select_quote(
             scheduled_date=quote.available_date,
         )
         db.add(work_order)
+        await db.flush()
+        await create_room_for_work_order(db, work_order)
     await create_notification(
         db,
         user_id=quote.contractor_id,
