@@ -1,5 +1,6 @@
 from app.db.models.auth_token import AuthToken
 from app.db.models.catalog import AiEstimate, Attachment, PricingRule, ReferenceCode, ServiceTask
+from app.db.models.chat import ChatMessage, ChatRoom, ChatRoomMember
 from app.db.models.contractor_profile import ContractorProfile
 from app.db.models.contractor_service import ContractorService
 from app.db.models.matching_request import MatchingRequest
@@ -21,6 +22,9 @@ __all__ = [
     "AiEstimate",
     "Attachment",
     "AuthToken",
+    "ChatMessage",
+    "ChatRoom",
+    "ChatRoomMember",
     "ContractorProfile",
     "ContractorService",
     "MatchingRequest",

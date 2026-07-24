@@ -4,6 +4,8 @@ from app.api.v1.routes.agreements import router as agreements_router
 from app.api.v1.routes.admin_rag import router as admin_rag_router
 from app.api.v1.routes.ai_estimates import router as ai_estimates_router
 from app.api.v1.routes.auth import router as auth_router
+from app.api.v1.routes.chat import router as chat_router
+from app.api.v1.routes.chat import ws_router as chat_ws_router
 from app.api.v1.routes.contractor_quotes import detail_router as contractor_quote_detail_router
 from app.api.v1.routes.contractor_matching import router as contractor_matching_router
 from app.api.v1.routes.contractor_quotes import router as contractor_quotes_router
@@ -25,6 +27,8 @@ api_router.include_router(contractor_matching_router)
 api_router.include_router(contractor_quotes_router)
 api_router.include_router(contractor_quote_detail_router)
 api_router.include_router(work_orders_router)
+api_router.include_router(chat_router)
+api_router.include_router(chat_ws_router)
 api_router.include_router(notifications_router)
 api_router.include_router(users_router)
 api_router.include_router(catalog_router)
