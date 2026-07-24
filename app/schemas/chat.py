@@ -23,6 +23,8 @@ class ChatRoomSummary(BaseModel):
     partner_name: str
     matching_request_title: str
     room_status: str
+    work_order_status: str
+    can_send_messages: bool = False
     unread_count: int = 0
     last_message: ChatMessageSummary | None = None
     created_at: datetime

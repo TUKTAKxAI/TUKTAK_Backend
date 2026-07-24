@@ -2,7 +2,7 @@ import asyncio
 from collections import defaultdict
 
 import jwt
-from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -178,7 +178,11 @@ async def chat_room_socket(websocket: WebSocket, chat_room_id: int) -> None:
                     await websocket.send_json({"type": "error", "detail": exc.errors()})
                     continue
 
-                message = await chat_service.create_message(db, current_user, chat_room_id, payload)
+                try:
+                    message = await chat_service.create_message(db, current_user, chat_room_id, payload)
+                except HTTPException as exc:
+                    await websocket.send_json({"type": "error", "detail": exc.detail, "status_code": exc.status_code})
+                    continue
                 await manager.broadcast_message(chat_room_id, message)
         except WebSocketDisconnect:
             pass

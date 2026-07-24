@@ -90,8 +90,16 @@ async def list_chat_rooms(
     )
     total = await db.scalar(select(func.count()).select_from(ChatRoom).where(member_filter))
     result = await db.execute(
-        select(ChatRoom, MatchingRequest.title, User.name, User.nickname, ContractorProfile.business_name)
+        select(
+            ChatRoom,
+            MatchingRequest.title,
+            WorkOrder.work_order_status,
+            User.name,
+            User.nickname,
+            ContractorProfile.business_name,
+        )
         .join(MatchingRequest, MatchingRequest.matching_request_id == ChatRoom.matching_request_id)
+        .join(WorkOrder, WorkOrder.work_order_id == ChatRoom.work_order_id)
         .join(User, User.user_id == ChatRoom.customer_id)
         .outerjoin(ContractorProfile, ContractorProfile.contractor_id == ChatRoom.contractor_id)
         .where(member_filter)
@@ -101,7 +109,7 @@ async def list_chat_rooms(
     )
 
     rooms: list[ChatRoomSummary] = []
-    for room, title, customer_name, customer_nickname, business_name in result.all():
+    for room, title, work_order_status, customer_name, customer_nickname, business_name in result.all():
         last_message = await db.scalar(
             select(ChatMessage)
             .where(ChatMessage.chat_room_id == room.chat_room_id, ChatMessage.deleted_at.is_(None))
@@ -138,6 +146,8 @@ async def list_chat_rooms(
                 partner_name=partner_name,
                 matching_request_title=title,
                 room_status=room.room_status,
+                work_order_status=work_order_status,
+                can_send_messages=room.room_status == "OPEN" and work_order_status == "IN_PROGRESS",
                 unread_count=int(unread_count or 0),
                 last_message=_message_summary(last_message, current_user) if last_message else None,
                 created_at=room.created_at,
@@ -180,8 +190,11 @@ async def create_message(
     payload: ChatSendMessage,
 ) -> ChatMessage:
     room = await require_room_member(db, current_user, chat_room_id)
-    if room.room_status != "OPEN":
-        raise HTTPException(status_code=409, detail="Chat room is closed")
+    work_order_status = await db.scalar(
+        select(WorkOrder.work_order_status).where(WorkOrder.work_order_id == room.work_order_id)
+    )
+    if room.room_status != "OPEN" or work_order_status != "IN_PROGRESS":
+        raise HTTPException(status_code=409, detail="Chat is available only while work is in progress")
 
     content = payload.content.strip()
     if not content:
