@@ -62,6 +62,44 @@ async def _resolve_region_code_id(db: AsyncSession, raw_region_code_id: int | No
     return raw_region_code_id
 
 
+async def _region_scope_ids(db: AsyncSession, region_code_id: int | None) -> set[int] | None:
+    if region_code_id is None:
+        return None
+
+    result = await db.execute(
+        select(ReferenceCode.code_id, ReferenceCode.parent_code_id).where(
+            ReferenceCode.code_group == "REGION",
+            ReferenceCode.is_active.is_(True),
+        )
+    )
+    parent_by_id: dict[int, int | None] = {}
+    children_by_parent: dict[int, list[int]] = {}
+    for code_id, parent_code_id in result.all():
+        parent_by_id[code_id] = parent_code_id
+        if parent_code_id is not None:
+            children_by_parent.setdefault(parent_code_id, []).append(code_id)
+
+    if region_code_id not in parent_by_id:
+        return {region_code_id}
+
+    scope = {region_code_id}
+
+    parent_id = parent_by_id.get(region_code_id)
+    while parent_id is not None and parent_id not in scope:
+        scope.add(parent_id)
+        parent_id = parent_by_id.get(parent_id)
+
+    stack = list(children_by_parent.get(region_code_id, []))
+    while stack:
+        child_id = stack.pop()
+        if child_id in scope:
+            continue
+        scope.add(child_id)
+        stack.extend(children_by_parent.get(child_id, []))
+
+    return scope
+
+
 async def _find_candidate_contractors(
     db: AsyncSession,
     region_code_id: int | None,
@@ -73,8 +111,9 @@ async def _find_candidate_contractors(
         ContractorProfile.matching_alert_enabled.is_(True),
         ContractorService.is_active.is_(True),
     ]
-    if region_code_id is not None:
-        filters.append(ContractorService.region_code_id == region_code_id)
+    region_scope_ids = await _region_scope_ids(db, region_code_id)
+    if region_scope_ids is not None:
+        filters.append(ContractorService.region_code_id.in_(region_scope_ids))
     if service_task_id is not None:
         filters.append(ContractorService.service_task_id == service_task_id)
 
