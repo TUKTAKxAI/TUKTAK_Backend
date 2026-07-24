@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    AiEstimate,
     ContractorProfile,
     ContractorService,
     MatchingRequest,
@@ -26,6 +27,7 @@ from app.services.notification import create_notification
 
 MATCHING_REQUEST_EXPIRE_DAYS = 7
 MATCHING_CANCELABLE_STATUSES = {"REQUESTED", "RECEIVING_QUOTES"}
+ACTIVE_MATCHING_STATUSES = {"REQUESTED", "RECEIVING_QUOTES"}
 
 
 async def _resolve_region_code_id(db: AsyncSession, raw_region_code_id: int | None) -> int | None:
@@ -105,6 +107,33 @@ async def create_matching_request(
     require_customer(current_user)
     now = datetime.now(timezone.utc)
     try:
+        active_matching_request_id = await db.scalar(
+            select(MatchingRequest.matching_request_id).where(
+                MatchingRequest.user_id == current_user.user_id,
+                MatchingRequest.matching_status.in_(ACTIVE_MATCHING_STATUSES),
+            )
+        )
+        if active_matching_request_id is not None:
+            raise HTTPException(
+                status_code=409,
+                detail="Customer already has an active matching request",
+            )
+
+        if payload.estimate_id is not None:
+            estimate = await db.scalar(
+                select(AiEstimate).where(
+                    AiEstimate.estimate_id == payload.estimate_id,
+                    AiEstimate.user_id == current_user.user_id,
+                )
+            )
+            if estimate is None:
+                raise HTTPException(status_code=404, detail="AI estimate not found")
+            if estimate.estimate_status != "COMPLETED":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Only completed AI estimates can be used for matching requests",
+                )
+
         region_code_id = await _resolve_region_code_id(db, payload.region_code_id)
         contractor_ids = await _find_candidate_contractors(
             db,

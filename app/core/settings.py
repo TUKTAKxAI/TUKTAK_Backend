@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from typing import Literal
 
@@ -45,6 +46,8 @@ class Settings(BaseSettings):
     aws_region: str = Field("ap-northeast-2", alias="AWS_REGION")
     s3_bucket_name: str | None = Field(None, alias="S3_BUCKET_NAME")
     ai_estimate_image_prefix: str = Field("ai-estimates", alias="AI_ESTIMATE_IMAGE_PREFIX")
+    local_upload_dir: str = Field("work/uploads", alias="LOCAL_UPLOAD_DIR")
+    s3_presigned_url_expires_seconds: int = Field(3600, gt=0, alias="S3_PRESIGNED_URL_EXPIRES_SECONDS")
 
     terms_of_service_version: str = Field("1.0", alias="TERMS_OF_SERVICE_VERSION")
     privacy_policy_version: str = Field("1.0", alias="PRIVACY_POLICY_VERSION")
@@ -89,6 +92,10 @@ class Settings(BaseSettings):
             database=self.db_name,
             query={"charset": "utf8mb4"},
         )
+
+    @property
+    def local_upload_path(self) -> Path:
+        return Path(self.local_upload_dir).resolve()
 
     @property
     def token_pepper(self) -> str:

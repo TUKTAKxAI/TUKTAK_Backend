@@ -65,6 +65,20 @@ class ContractorQuoteSummary(BaseModel):
     budget_min: Decimal | None = None
     budget_max: Decimal | None = None
     request_message: str | None = None
+    estimate_id: int | None = None
+    estimate_description: str | None = None
+    estimate_image_urls: list[str] = Field(default_factory=list)
+    estimate_main_category: str | None = None
+    estimate_object_label: str | None = None
+    estimate_problem_label: str | None = None
+    estimate_repair_task_name: str | None = None
+    estimate_severity: str | None = None
+    estimate_min_price: Decimal | None = None
+    estimate_max_price: Decimal | None = None
+    estimate_minutes_min: int | None = None
+    estimate_minutes_max: int | None = None
+    estimate_confidence_score: Decimal | None = None
+    estimate_ai_summary: str | None = None
     matching_status: str
     quote_status: str
     total_amount: Decimal

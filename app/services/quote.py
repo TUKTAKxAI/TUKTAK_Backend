@@ -5,6 +5,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
+    AiEstimate,
     ContractorProfile,
     MatchingRequest,
     MatchingTarget,
@@ -24,6 +25,7 @@ from app.services.matching_common import (
 )
 from app.services.matching_request import get_matching_request_detail
 from app.services.notification import create_notification
+from app.services.s3_image_storage import display_image_urls
 
 
 QUOTE_OPEN_MATCHING_STATUSES = {"REQUESTED", "RECEIVING_QUOTES"}
@@ -168,10 +170,12 @@ async def list_contractor_quotes(
             MatchingRequest,
             ReferenceCode.code_name.label("region_name"),
             ServiceTask.task_name.label("service_task_name"),
+            AiEstimate,
         )
         .join(MatchingRequest, MatchingRequest.matching_request_id == Quote.matching_request_id)
         .outerjoin(ReferenceCode, ReferenceCode.code_id == MatchingRequest.region_code_id)
         .outerjoin(ServiceTask, ServiceTask.service_task_id == MatchingRequest.service_task_id)
+        .outerjoin(AiEstimate, AiEstimate.estimate_id == MatchingRequest.estimate_id)
         .where(*filters)
         .order_by(Quote.created_at.desc())
         .offset((page - 1) * size)
@@ -193,6 +197,20 @@ async def list_contractor_quotes(
             budget_min=matching_request.budget_min,
             budget_max=matching_request.budget_max,
             request_message=matching_request.request_message,
+            estimate_id=matching_request.estimate_id,
+            estimate_description=estimate.description if estimate else None,
+            estimate_image_urls=display_image_urls(estimate.image_urls if estimate else None),
+            estimate_main_category=estimate.main_category if estimate else None,
+            estimate_object_label=estimate.object_label if estimate else None,
+            estimate_problem_label=estimate.problem_label if estimate else None,
+            estimate_repair_task_name=estimate.repair_task_name if estimate else None,
+            estimate_severity=estimate.severity if estimate else None,
+            estimate_min_price=estimate.min_price if estimate else None,
+            estimate_max_price=estimate.max_price if estimate else None,
+            estimate_minutes_min=estimate.estimated_minutes_min if estimate else None,
+            estimate_minutes_max=estimate.estimated_minutes_max if estimate else None,
+            estimate_confidence_score=estimate.confidence_score if estimate else None,
+            estimate_ai_summary=estimate.ai_summary if estimate else None,
             matching_status=matching_request.matching_status,
             quote_status=quote.quote_status,
             total_amount=quote.total_amount,
@@ -205,7 +223,7 @@ async def list_contractor_quotes(
             selected_at=quote.selected_at,
             created_at=quote.created_at,
         )
-        for quote, matching_request, region_name, service_task_name in result.all()
+        for quote, matching_request, region_name, service_task_name, estimate in result.all()
     ]
     return items, page, size, int(total or 0)
 
